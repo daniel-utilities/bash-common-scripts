@@ -1,2 +1,2 @@
-# template-vscode-project
-Project template containing a basic VS Code setup
+# bash-installer-scripts
+This repo is intended to be used as a submodule in another project which requires software installation.
