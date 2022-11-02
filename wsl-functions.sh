@@ -33,7 +33,6 @@
 #
 function is_wsl2() {
     grep -q "WSL2" /proc/version && return 0 || return 1
-    export _WSL2="y"
 }
 
 
@@ -224,8 +223,11 @@ if [ -z "$_COMMON_FUNCS_AVAILABLE" ]; then
 fi
 
 if is_wsl2; then
+    export _WSL2=0
     wsl2_get_distro_name
     wsl2_get_cmd_path
     wsl2_get_powershell_path
+else
+    export _WSL2=1
 fi
 
