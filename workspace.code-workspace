@@ -2,9 +2,31 @@
 	"folders": [
 		{
 			"path": "."
-		}
+		},
+		{
+			"path": "/mnt/c/Users/Daniel/Projects/daniel-utilities/docker-scripts"
+		},
+		{
+			"path": "/home/daniel/daniel-utilities/mindstorms-scripts"
+		},
+		{
+			"path": "/home/daniel/daniel-utilities/wsl-cuda-scripts"
+		},
+		{
+			"path": "/home/daniel/daniel-utilities/wsl-usb-scripts"
+		},
+		{
+			"path": "/home/daniel/daniel-contrib/nxtOSEK"
+		},
+		{
+			"path": "/home/daniel/daniel-utilities/ros-noetic-scripts"
+		},
+		{
+			"path": "/home/daniel/daniel-robotics/ros_catkin_ws"
+		},
 	],
 	"settings": {
-		"files.eol": "\n"
+		"files.eol": "\n",
+		"explorer.expandSingleFolderWorkspaces": false
 	}
 }
