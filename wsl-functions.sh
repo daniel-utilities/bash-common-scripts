@@ -223,11 +223,9 @@ if [ -z "$_COMMON_FUNCS_AVAILABLE" ]; then
 fi
 
 if is_wsl2; then
-    export _WSL2=0
+    export _WSL2="y"
     wsl2_get_distro_name
     wsl2_get_cmd_path
     wsl2_get_powershell_path
-else
-    export _WSL2=1
 fi
 
