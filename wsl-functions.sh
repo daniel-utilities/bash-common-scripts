@@ -223,8 +223,9 @@ if [ -z "$_COMMON_FUNCS_AVAILABLE" ]; then
     exit 1
 fi
 
-require_wsl2
+if is_wsl2; then
+    wsl2_get_distro_name
+    wsl2_get_cmd_path
+    wsl2_get_powershell_path
+fi
 
-wsl2_get_distro_name
-wsl2_get_cmd_path
-wsl2_get_powershell_path
