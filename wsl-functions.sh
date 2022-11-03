@@ -29,10 +29,15 @@
 # Example:
 #   is_wsl2 && echo yes || echo no
 # Outputs:
+#   $_WSL2      - Numeric global var; 0 indicates this system is WSL2
 #   $?          - Numeric exit value; 0 indicates this system is WSL2.
 #
 function is_wsl2() {
-    grep -q "WSL2" /proc/version && return 0 || return 1
+    if [ -z "$_WSL2" ]; then
+        grep -q "WSL2" /proc/version
+        export _WSL2=$?
+    fi
+    return $_WSL2
 }
 
 
@@ -50,44 +55,70 @@ function require_wsl2() {
 # wsl2_get_distro_name
 #   Determine the name of this WSL distro on the system. Each WSL installation has a unique name associated with it.
 # Outputs:
-#   $_DISTRO    - Name of WSL2 distro.
-#   $?          - Numeric exit value; 0 indicates success.
+#   $_WSL2_DISTRO - Name of WSL2 distro.
+#   $?            - Numeric exit value; 0 indicates success.
 #
 function wsl2_get_distro_name(){
-    export _DISTRO="$(IFS='\'; x=($(wslpath -w /)); echo "${x[${#x[@]}-1]}")"
+    require_wsl2
+
+    if [ -z "$_WSL2_DISTRO" ]; then
+        export _WSL2_DISTRO="$(IFS='\'; x=($(wslpath -w /)); echo "${x[${#x[@]}-1]}")"
+    fi
 }
 
 
 # wsl2_get_cmd_path
 #   Get the wsl-equivalent path to cmd.exe.
 # Outputs:
-#   $_CMD       - WSL path to cmd.exe
-#   $?          - Numeric exit value; 0 indicates success.
+#   $_WSL2_CMD_PATH - WSL path to cmd.exe
+#   $?              - Numeric exit value; 0 indicates success.
 #
 function wsl2_get_cmd_path(){
-    export _CMD="cmd.exe"
-    [[ ! $(type -P "cmd.exe") ]] && _CMD="$(wslpath 'C:\Windows\System32\cmd.exe')"
+    require_wsl2
+
+    if [ -z "$_WSL2_CMD_PATH" ]; then
+        export _WSL2_CMD_PATH="cmd.exe"
+        [[ ! $(type -P "cmd.exe") ]] && _WSL2_CMD_PATH="$(wslpath 'C:\Windows\System32\cmd.exe')"
+    fi
 }
 
 
 # wsl2_get_powershell_path
 #   Get the wsl-equivalent path to powershell.exe.
 # Outputs:
-#   $_POWERSHELL - WSL path to powershell.exe
-#   $?           - Numeric exit value; 0 indicates success.
+#   $_WSL2_POWERSHELL_PATH  - WSL path to powershell.exe
+#   $?                      - Numeric exit value; 0 indicates success.
 #
 function wsl2_get_powershell_path(){
-    export _POWERSHELL="powershell.exe"
-    [[ ! $(type -P "$_POWERSHELL") ]] && _POWERSHELL="$(wslpath 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')"
+    require_wsl2
+
+    if [ -z "$_WSL2_POWERSHELL_PATH" ]; then
+        export _WSL2_POWERSHELL_PATH="powershell.exe"
+        [[ ! $(type -P "$_WSL2_POWERSHELL_PATH") ]] && _WSL2_POWERSHELL_PATH="$(wslpath 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')"
+    fi
 }
 
+
+# wsl2_get_version
+#   Get the installed version of WSL by running "wsl --version". At the moment, only works for Windows Store versions of WSL.
+# Outputs:
+#   $_WSL2_VERSION - WSL version number, or 0.0 if could not be determined.
+#
+function wsl2_get_version(){
+    require_wsl2
+
+    if [ -z "$_WSL2_VERSION" ]; then
+        export _WSL2_VERSION="$( cmd_exec "wsl --version" | grep "WSL version" | cut -d':' -f2  2>/dev/null || echo "0.0" )"
+        _WSL2_VERSION="$( trim "$_WSL2_VERSION" )"
+    fi
+}
 
 # ps_exec {exepath} {args} [elevated=false/true [hidden=false/true]]
 #   Start a Windows process in a new Powershell window, from within WSL.
 # Example: Shows an error in CMD window unless elevated=true.
 #   ps_exec "C:\\Windows\\System32\\cmd.exe" "/k net session && pause" elevated=true hidden=true
 # Inputs:
-#   $_POWERSHELL        - WSL path to powershell.exe (or cmd /c powershell.exe)
+#   $_WSL2_POWERSHELL_PATH  - WSL path to powershell.exe (or cmd /c powershell.exe)
 #   exepath             - Windows path (uses backslashes) to executable file
 #   args                - String containing list of arguments to pass to executable
 #   elevated=false/true - (Optional): Defaults to false. If true, EXE will be launched as Administrator.
@@ -97,6 +128,8 @@ function wsl2_get_powershell_path(){
 #   $?                  - Numeric exit value of the Windows process. 0 indicates success.
 #
 function ps_exec() {
+    require_wsl2
+
     if [[ "$1" == "" ]]; then   return_error "No executable specified."
     else                        local EXE="$1"
     fi
@@ -112,12 +145,14 @@ function ps_exec() {
     else                        return_error "Invalid parameter 4: $4"
     fi
 
+    wsl2_get_powershell_path  # ensures $_WSL2_POWERSHELL_PATH  is set
+
     local FIXEDARGS=${ARGS//\'/\'\'}
     local PARAMS="\"$EXE\" -ArgumentList '$FIXEDARGS' -Wait -PassThru"
     if [[ "$HIDE_WINDOW" == true ]]; then PARAMS="$PARAMS -WindowStyle Hidden"; fi
     if [[ "$ELEVATED" == true ]]; then PARAMS="$PARAMS -Verb RunAs"; fi
     local CMDLET="\$PROC=Start-Process $PARAMS; \$PROC.hasExited | Out-Null; \$PROC.GetType().GetField('exitCode', 'NonPublic, Instance').GetValue(\$PROC); exit"
-    local EXITCODE=$("$_POWERSHELL" -NoProfile -ExecutionPolicy Bypass -Command "$CMDLET" | tr -d '[:space:]')
+    local EXITCODE=$("$_WSL2_POWERSHELL_PATH" -NoProfile -ExecutionPolicy Bypass -Command "$CMDLET" | tr -d '[:space:]')
     return $EXITCODE
 }
 
@@ -127,7 +162,7 @@ function ps_exec() {
 # Example: Shows an error in CMD window unless elevated=true.
 #   cmd_exec "ipconfig"
 # Inputs:
-#   $_CMD               - WSL path to cmd.exe
+#   $_WSL2_CMD_PATH               - WSL path to cmd.exe
 #   command             - CMD-executable command. Combine multiple commands in one line with '&&'.
 #   working_dir         - (Optional): Windows path (uses backslashes) to execute command from.
 # Outputs:
@@ -135,15 +170,20 @@ function ps_exec() {
 #   $?                  - Numeric exit value of the Windows process. 0 indicates success.
 #
 function cmd_exec() {
+    require_wsl2
+
     if [[ "$1" == "" ]]; then   return_error "No command specified."
     else                        local COMMAND="$1"
     fi
     if [[ "$2" == "" ]]; then   local WIN_DIR="$(wslpath 'C:\Windows\System32')"
     else                        local WIN_DIR="$(wslpath "$2")"
     fi
+
+    wsl2_get_cmd_path  # ensures $_WSL2_CMD_PATH  is set
+
     local ORIGINAL_PWD="$PWD"
     cd "$WIN_DIR"
-    "$_CMD" /c $COMMAND
+    "$_WSL2_CMD_PATH" /c $COMMAND | iconv -f UTF-16 -t UTF-8
     local EXITCODE=$?
     cd "$ORIGINAL_PWD"
     return $EXITCODE
@@ -151,81 +191,12 @@ function cmd_exec() {
 
 
 
-# wsl2_enable_service {service} [user]
-#   Configures an init.d service to autostart with the rest of the WSL2 instance.
-# Inputs:
-#   service     - Name of init.d service to autostart.
-#   user        - (Optional) User for which the service will autostart. Defaults to $USER if not specified.
-#                   User must have sudo privilege.
-# Outputs:
-#   $?          - Numeric exit value; 0 indicates success.
-#
-function wsl2_enable_service(){
-    require_non_root
-
-    if [[ "$1" == "" ]]; then return_error "No service specified."
-    else                      local SERVICE="$1"
-    fi
-    if [[ "$2" == "" ]]; then local _USER="$USER"
-    else                      local _USER="$2"
-    fi
-
-    # Need to be able to run "sudo service SERVICE start/stop" passwordlessly
-    local SUDOER_FILE="/etc/sudoers.d/$_USER"
-    local SUDOER_ENTRY="$_USER ALL=(ALL) NOPASSWD: /usr/sbin/service $SERVICE *"
-    ensure_line_visudo "$SUDOER_FILE" "$SUDOER_ENTRY" match=whole
-
-    # Launch service in background using ~/.profile
-    local _HOME="$( getent passwd "$_USER" | cut -d: -f6 )"
-    local AUTORUN_FILE="$_HOME/.profile"
-    local COMMAND="(nohup sudo service $SERVICE start </dev/null >/dev/null 2>&1 &)"
-    ensure_line "$AUTORUN_FILE" "$COMMAND" match=whole
-}
-
-
-# wsl2_disable_service {service} [user]
-#   Disables an init.d service from autostarting with the rest of the system.
-# Inputs:
-#   service     - Name of init.d service to disable autostart.
-#   user        - (Optional) User for which the service was enabled with. Defaults to $USER if not specified.
-# Outputs:
-#   $?          - Numeric exit value; 0 indicates success.
-#
-function wsl2_disable_service(){
-    require_non_root
-
-    if [[ "$1" == "" ]]; then return_error "No service specified."
-    else                      local SERVICE="$1"
-    fi
-    if [[ "$2" == "" ]]; then local _USER="$USER"
-    else                      local _USER="$2"
-    fi
-
-    # Remove permissions from sudoer file
-    local SUDOER_FILE="/etc/sudoers.d/$_USER"
-    local SUDOER_ENTRY="$_USER ALL=(ALL) NOPASSWD: /usr/sbin/service $SERVICE *"
-    delete_lines_matching "$SUDOER_FILE" "$SUDOER_ENTRY" match=partial sudo=true
-
-    # Remove autostart entry in ~/.profile
-    local _HOME="$( getent passwd "$_USER" | cut -d: -f6 )"
-    local AUTORUN_FILE="$_HOME/.profile"
-    local COMMAND="(nohup sudo service $SERVICE start </dev/null >/dev/null 2>&1 &)"
-    delete_lines_matching "$AUTORUN_FILE" "$COMMAND" match=whole
-}
-
-
 #####################################################################################################
 
 if [ -z "$_COMMON_FUNCS_AVAILABLE" ]; then
     echo "ERROR: This script requires \"common-functions.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
-    exit 1
+    return 1
 fi
 
-if is_wsl2; then
-    export _WSL2="y"
-    wsl2_get_distro_name
-    wsl2_get_cmd_path
-    wsl2_get_powershell_path
-fi
-
+export _WSL_FUNCS_AVAILABLE='y'

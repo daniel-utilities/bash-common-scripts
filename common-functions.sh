@@ -100,6 +100,16 @@ function require_non_root() {
     is_root && return_error "Script can not be run by root. Retry without sudo."
 }
 
+# get_user_home {user}
+#   Gets the home directory of the specified user.
+# Inputs:
+#   user        - Username
+# Outputs:
+#   $_HOME      - Variable containing the home directory of the user, or "" (empty) if not found.
+#
+function get_user_home() {
+    _HOME="$( getent passwd "$USER" | cut -d: -f6 )"
+}
 
 # auto_install:  Copies files from SOURCE to DESTINATION and applies chmod +x to scripts.
 # Inputs:
@@ -172,6 +182,16 @@ function search_replace_line_in_file()
 function newlines_to_spaces()
 {
     echo "$1" | tr '\n' ' '
+}
+
+# Read parameter values with "${params[$name]}"
+function parse_name_value_pairs(){
+    declare -A params
+    while IFS=$'[ \t]*=[ \t]*' read -r name value
+    do
+        echo "Read name=$name, value=$value" >&2
+        params[$name]="$value"
+    done
 }
 
 
@@ -296,6 +316,86 @@ function delete_lines_matching(){
         echo "$LINE"
     fi
 }
+
+
+# sysd_config_user_service {service} {enable/disable} [boot=false/true]
+#   Configures a SystemD (systemctl) service to start automatically when the current user logs in.
+#   Service is run as the current user, inheriting privilege.
+# Inputs:
+#   service         - Name of SystemD service. Must have a .service config file in "$HOME/.config/systemd/user/"
+#   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
+#   boot=false/true - (Optional): if true, all of this user's services will start on system boot instead of when the user logs in.
+#                       It will still run with the user's privilege level. It will continue running when the user logs out.
+# Outputs:
+#   $?              - Numeric exit value; 0 indicates success.
+#
+function sysd_config_user_service() {
+    require_non_root
+
+    if [[ "$1" == "" ]]; then            return_error "No service specified."
+    else                                 local SERVICE="$1"
+    fi
+    if [[ "$2" == "" ]]; then            return_error "Need to specify enable/disable."
+    elif [[ "$2" == "enable" ]]; then    local MODE="enable"
+    elif [[ "$2" == "disable" ]]; then   local MODE="disable"
+    else                                 return_error "Need to specify enable/disable."
+    fi
+    if [[ "$3" == "" ]]; then            local LINGER="disable-linger"
+    elif [[ "$3" == "boot=false" ]]; then local LINGER="disable-linger"
+    elif [[ "$3" == "boot=true" ]]; then local LINGER="enable-linger"
+    else                                 return_error "Invalid boot parameter."
+    fi
+
+    SERVICE_FILE="$HOME/.config/systemd/user/$SERVICE.service"
+    [ ! -e "$SERVICE_FILE" ] && return_error "Required file $SERVICE_FILE does not exist."
+
+    systemctl --user $MODE $SERVICE
+    systemctl --user daemon-reload
+
+    loginctl $LINGER $USER
+}
+
+# sysv_config_user_service {service} {enable/disable}
+#   Configures a SystemV (init.d) service to start automatically when the current user logs in.
+#   Service is always run with root privilege, not with the user privilege.
+#   Required for systems without systemctl (Such as WSL).
+# Inputs:
+#   service         - Name of SystemV service. Must have a launch script in /etc/init.d.
+#   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
+# Outputs:
+#   $?              - Numeric exit value; 0 indicates success.
+#
+function sysv_config_user_service() {
+    require_non_root
+
+    if [[ "$1" == "" ]]; then   return_error "No service specified."
+    else                        local SERVICE="$1"
+    fi
+    if [[ "$2" == "" ]]; then   return_error "Need to specify enable/disable."
+    elif [[ "$2" == "enable" ]]; then   local MODE="enable"
+    elif [[ "$2" == "disable" ]]; then  local MODE="disable"
+    else                        return_error "Need to specify enable/disable."
+    fi
+
+    local SUDOER_FILE="/etc/sudoers.d/$USER"
+    local SUDOER_ENTRY="$USER ALL=(ALL) NOPASSWD: /usr/sbin/service $SERVICE *"
+    local AUTORUN_FILE="$HOME/.profile"
+    local AUTORUN_COMMAND="(nohup sudo service $SERVICE start </dev/null >/dev/null 2>&1 &)"
+
+    if [[ "$MODE" == "enable" ]]; then
+        # Need to be able to run "sudo service SERVICE start/stop" passwordlessly
+        ensure_line_visudo "$SUDOER_FILE" "$SUDOER_ENTRY" match=whole
+        # Launch service in background using ~/.profile
+        ensure_line "$AUTORUN_FILE" "$AUTORUN_COMMAND" match=whole
+    else
+        # Remove permissions from sudoer file
+        delete_lines_matching "$SUDOER_FILE" "$SUDOER_ENTRY" match=partial sudo=true
+        # Remove autostart entry in ~/.profile
+        delete_lines_matching "$AUTORUN_FILE" "$AUTORUN_COMMAND" match=whole
+    fi
+}
+
+
 
 
 #####################################################################################################
