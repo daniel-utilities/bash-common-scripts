@@ -2,7 +2,5 @@
 source common-functions.sh
 source wsl-functions.sh
 
-OUTPUT="$(cmd_exec 'wsl --version')"
-
-echo "$OUTPUT"
-echo $?
+get_script_dir
+echo "$_SCRIPT_DIR"

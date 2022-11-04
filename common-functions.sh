@@ -37,32 +37,6 @@ function return_error(){
 }
 
 
-# get_script_dir
-#   Returns the full path containing the currently-running script.
-# Example:
-#   SCRIPT_DIR=$(get_script_dir)
-# Inputs:
-#   $0          - Script directory is recovered from the $0 command line argument
-# Outputs:
-#   &1 (stdout) - Function prints to standard output channel.
-#
-function get_script_dir(){
-    dirname "$(readlink -f "$0")"
-}
-
-
-# print_ifs
-#   Prints the $IFS variable, making whitespace characters visible. Useful for debugging.
-# Inputs:
-#   $IFS        - Typically defaults to ' ', '\n', '\t'
-# Outputs:
-#   &1 (stdout) - Function prints to standard output channel.
-#
-function print_ifs(){
-    printf "%s" "$IFS" | od -bc
-}
-
-
 # is_root
 #   Checks if script is being run by root user.
 # Example:
@@ -70,13 +44,13 @@ function print_ifs(){
 # Outputs:
 #   $?          - Numeric exit value; 0 indicates this script is being run by root.
 #
-function is_root(){
+function is_root() {
     [ "$EUID" -eq 0 ] && return 0 || return 1
 }
 
 
 # require_root
-#   Returns from the calling function if not being run by root user.
+#   Returns from the calling function with an error message if not being run by root user.
 # Inputs:
 #   None
 # Outputs:
@@ -89,7 +63,7 @@ function require_root() {
 
 
 # require_non_root
-#   Returns from the calling function if being run by root user.
+#   Returns from the calling function with an error message if being run by root user.
 # Inputs:
 #   None
 # Outputs:
@@ -99,6 +73,59 @@ function require_root() {
 function require_non_root() {
     is_root && return_error "Script can not be run by root. Retry without sudo."
 }
+
+
+# is_systemd
+#   Checks if system has been initialized with systemd.
+# Outputs:
+#   $__SYSTEMD   - 
+#   $?          - Numeric exit value; 0 indicates systemd has been started.
+#
+function is_systemd() {
+    if [ -z "$__SYSTEMD" ]; then
+        systemctl list-units --type=service > /dev/null 2> /dev/null
+        export __SYSTEMD=$?
+    fi
+    return $__SYSTEMD
+}
+
+
+# require_systemd
+#   Returns from the calling function with an error message if systemd is not available.
+# Inputs:
+#   None
+# Outputs:
+#   &2 (stderr) - Function prints to standard error channel.
+#   $?          - Numeric exit value; 0 indicates this script is being run by root.
+#
+function require_systemd() {
+    is_systemd || return_error "SystemD init is required, but not available on this system."
+}
+
+
+# print_ifs
+#   Prints the $IFS variable, making whitespace characters visible. Useful for debugging.
+# Inputs:
+#   $IFS        - Typically defaults to ' ', '\n', '\t'
+# Outputs:
+#   &1 (stdout) - Function prints to standard output channel.
+#
+function print_ifs() {
+    printf "%s" "$IFS" | od -bc
+}
+
+
+# get_script_dir
+#   Returns the full path containing the currently-running script.
+# Inputs:
+#   $0              - Script directory is recovered from the $0 command line argument.
+# Outputs:
+#   $_SCRIPT_DIR    - Global var containing parent directory of the script.
+#
+function get_script_dir(){
+    _SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+}
+
 
 # get_user_home {user}
 #   Gets the home directory of the specified user.
@@ -110,6 +137,7 @@ function require_non_root() {
 function get_user_home() {
     _HOME="$( getent passwd "$USER" | cut -d: -f6 )"
 }
+
 
 # auto_install:  Copies files from SOURCE to DESTINATION and applies chmod +x to scripts.
 # Inputs:
@@ -134,18 +162,91 @@ function auto_install() {
     done
 }
 
-
-# trim:  Trims leading and trailing whitespace from a string
+# operate_on_each {func_name} {in_delims} {out_delim} [REF]
+#   Runs the specified function on every token of input, then concatenates all the outputs.
+#   By default, stdin is tokenized and the output is stdout.
+#   If a variable name is provided in REF, REF is tokenized and the output is stored back to REF.
+# Example:
+#   echo "  string_with_whitespace  " | trim
+#   trim MY_VAR
 # Inputs:
-#   trim "\t string_with_whitespace \n  "
+#   func_name - Name of function to run on each token of input.
+#               Function should accept a single REF variable as input, and output back to REF.
+#   in_delims - Characters to split the input into tokens.
+#               To split on spaces, tabs, and newlines, use:  $' \t\n'
+#   out_delim - String to place between each token of output.
+#   REF       - If variable name supplied, operates on each token of REF's contents.
+#               CANNOT be named any of the following: ref out in
+#   <         - If REF not supplied, operates on each token on stdin.
 # Outputs:
-#   echo string_without_whitespace
+#   REF       - If variable name supplied, returns output into REF.
+#   >         - If REF not supplied, outputs to stdout.
+#
+function operate_on_each(){
+    if [[ "$1" == "" ]]; then return_error "No function specified."
+    else                      local -n func=$1
+    fi
+    if [[ "$2" == "" ]]; then return_error "No input delimiters specified."
+    else                      local in_delims="$2"
+    fi
+    if [[ "$3" == "" ]]; then return_error "No output delimiters specified."
+    else                      local out_delim="$3"
+    fi
+    if [[ "$4" == "" ]]; then local _ref=""
+                              local _in=""
+                              local _out=""
+                              local printf_opts=""
+                              local source_pipe=""
+    else                      local -n _ref=$4;
+                              local _in="$ref"
+                              local _out=""
+                              local printf_opts="-v _out"
+                              local source_pipe='printf %s "$_in" | \'
+    fi
+
+    local tok
+    $source_pipe
+    while IFS="$in_delims" read -r tok; do
+        func "$tok"
+        builtin printf $printf_opts '%s%s%s' "$_out" "$out_delim" "$tok"
+    done
+
+    [ -z $_ref ] || _ref="$_out"
+}
+
+# trim_str {REF}
+#   REF - Variable name to reference; CANNOT be named: _ref _out _in
+function trim_str(){
+    local -n _ref=$1
+    local _in="$_ref"
+    local _out=""
+
+    _in="${_in#"${_in%%[![:space:]]*}"}"
+    _in="${_in%"${_in##*[![:space:]]}"}"
+    _out="$_in"
+
+    [ -z $_ref ] || _ref="$_out"
+}
+
+# trim [REF]
+#   Trims leading and trailing whitespace from each line of input.
+# Example:
+#   echo "  string_with_whitespace  " | trim
+#   trim MY_VAR
+# Inputs:
+#   REF     - If variable name supplied, trim operates line-by-line on REF's contents.
+#   <       - If REF not supplied, trim operates line-by-line on stdin.
+# Outputs:
+#   REF     - If variable name supplied, trim returns output into REF.
+#   >       - If REF not supplied, trim outputs to stdout.
 #
 function trim() {
-    local var="$*"
-    var="${var#"${var%%[![:space:]]*}"}"
-    var="${var%"${var##*[![:space:]]}"}"
-    printf '%s' "$var"
+    if [ $# == 0 ]; then    local OUT=""
+                            local STDIN=0
+    elif [ $# == 1 ]; then  local -n OUT=$1
+                            local STDIN=1
+    else                    return_error "Invalid number of arguments."
+    fi
 }
 
 function git_reset_pull()
@@ -168,20 +269,51 @@ function git_reset_pull()
 }
 
 
-function search_replace_line_in_file()
-{
-    local SEARCH="$1"
-    local REPLACE="$2"
-    local FILE="$3"
-    local SUDO="$4"
-
-    sed -i "s#$SEARCH#$REPLACE#" "$FILE"
-}
-
-
 function newlines_to_spaces()
 {
     echo "$1" | tr '\n' ' '
+}
+
+# replace_line {file} {search_str} {replace_str} [match=whole/partial [sudo=true/false]]
+#   Scans for a line matching str, then replaces the entire line in-place.
+# Inputs:
+#   file        - File to edit.
+#   search_str  - String to search for in file. Can be a regex.
+#   replace_str - String to replace line with, on every line matching search_str.
+#   match=whole/partial - (Optional) Whole line must match str, or only part. Defaults to match=whole.
+#   sudo=true/false - (Optional); use sudo to read and write file.
+# Outputs:
+#   &1 (stdout) - Function prints to standard output channel.
+#   $?          - Numeric exit value; 0 indicates success.
+#
+function ensure_line(){
+    if [[ "$1" == "" ]]; then return_error "No file specified"
+    else                      local FILE="$1"
+    fi
+    if [[ "$2" == "" ]]; then return_error "No string specified"
+    else                      local LINE="$2"
+    fi
+    if [[ "$3" == "" ]]; then local GREP_FLAGS="-x"
+    elif [[ "$3" == "match=whole" ]];   then local GREP_FLAGS="-x"
+    elif [[ "$3" == "match=partial" ]]; then local GREP_FLAGS=""
+    else                      return_error "Invalid match parameter: $3"
+    fi
+    if [[ "$4" == "sudo=true" ]]; then local SUDO_COMMAND="sudo"
+    else                      local SUDO_COMMAND=""
+    fi
+
+    $SUDO_COMMAND touch "$FILE" 2>/dev/null || return_error "$FILE is not writeable."
+    $SUDO_COMMAND test -r "$FILE" || return_error "$FILE is not readable."
+
+    $SUDO_COMMAND sed -i "s#$SEARCH#$REPLACE#" "$FILE"
+    if ! $SUDO_COMMAND grep $GREP_FLAGS -qF "$LINE" "$FILE"; then
+        echo "Appending line to $FILE:"
+        echo "$LINE"
+        echo "$LINE" | $SUDO_COMMAND tee -a "$FILE" > /dev/null
+    else
+        echo "$FILE already contains at least one line matching:"
+        echo "$LINE"
+    fi
 }
 
 # Read parameter values with "${params[$name]}"
@@ -189,7 +321,6 @@ function parse_name_value_pairs(){
     declare -A params
     while IFS=$'[ \t]*=[ \t]*' read -r name value
     do
-        echo "Read name=$name, value=$value" >&2
         params[$name]="$value"
     done
 }
@@ -331,6 +462,7 @@ function delete_lines_matching(){
 #
 function sysd_config_user_service() {
     require_non_root
+    require_systemd
 
     if [[ "$1" == "" ]]; then            return_error "No service specified."
     else                                 local SERVICE="$1"
@@ -399,4 +531,4 @@ function sysv_config_user_service() {
 
 
 #####################################################################################################
-_COMMON_FUNCS_AVAILABLE="y"
+__COMMON_FUNCS_AVAILABLE=0
