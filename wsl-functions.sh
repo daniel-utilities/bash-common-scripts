@@ -193,10 +193,10 @@ function cmd_exec() {
 
 #####################################################################################################
 
-if ! $__COMMON_FUNCS_AVAILABLE; then
+if [ ! $__COMMON_FUNCS_AVAILABLE ]; then
     echo "ERROR: This script requires \"common-functions.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
     return 1
 fi
 
-export __WSL2_FUNCS_AVAILABLE=0
+__WSL2_FUNCS_AVAILABLE=0

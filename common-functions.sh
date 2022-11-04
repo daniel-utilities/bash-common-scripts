@@ -8,12 +8,13 @@
 #
 #####################################################################################################
 #
-# func_name {required_arg} [optional_arg]
+# func_name {required_arg} [optional_arg] [REF]
 #   Description
 # Inputs:
 #   $GLOBALVAR  - Required global variable read by the function.
 #   required_arg - desc
 #   optional_arg - (Optional)
+#   REF         - Variable name (non-quoted) for pass-by-reference.
 # Outputs:
 #   $GLOBALVAR  - Global variable written to by the function.
 #   &1 (stdout) - Function prints to standard output channel.
@@ -103,15 +104,17 @@ function require_systemd() {
 }
 
 
-# print_ifs
-#   Prints the $IFS variable, making whitespace characters visible. Useful for debugging.
+# print_octal str
+#   Prints the octal representation of the string over top of its ASCII counterpart.
+# Example:
+#   print_octal "$IFS"
 # Inputs:
-#   $IFS        - Typically defaults to ' ', '\n', '\t'
+#   str         - String to print.
 # Outputs:
 #   &1 (stdout) - Function prints to standard output channel.
 #
-function print_ifs() {
-    printf "%s" "$IFS" | od -bc
+function print_octal() {
+    printf '%s' "$1" | od -bc
 }
 
 
@@ -162,91 +165,206 @@ function auto_install() {
     done
 }
 
-# operate_on_each {func_name} {in_delims} {out_delim} [REF]
-#   Runs the specified function on every token of input, then concatenates all the outputs.
-#   By default, stdin is tokenized and the output is stdout.
-#   If a variable name is provided in REF, REF is tokenized and the output is stored back to REF.
-# Example:
-#   echo "  string_with_whitespace  " | trim
-#   trim MY_VAR
+# operate_on_each {function_call} {tokenize=stdin}        [in_delim [out_delim]]
+# operate_on_each {function_call} {tokenize=string} {REF} [in_delim [out_delim]] 
+# operate_on_each {function_call} {tokenize=array}  {REF}
+#   Runs the specified function on every token of input.
+#   Three operating modes:
+#       tokenize=stdin :   Scans stdin, separates into tokens according to in_delim.
+#                          Applies function_call to each token, then writes each modified token to stdout.
+#       tokenize=string :  Assumes REF is a string. Separates REF into tokens according to in_delim.
+#                          Applies function_call to each token, then writes each modified token back to REF in sequence.
+#       tokenize=array :   Assumes REF is an array. Applies function_call to each element of REF.
 # Inputs:
-#   func_name - Name of function to run on each token of input.
-#               Function should accept a single REF variable as input, and output back to REF.
-#   in_delims - Characters to split the input into tokens.
-#               To split on spaces, tabs, and newlines, use:  $' \t\n'
-#   out_delim - String to place between each token of output.
-#   REF       - If variable name supplied, operates on each token of REF's contents.
-#               CANNOT be named any of the following: ref out in
-#   <         - If REF not supplied, operates on each token on stdin.
+#   function_call - String containing function call to run on each token of input.
+#                   Function must support at least one REF (pass-by-reference) argument.
+#                   Write a literal REF (unquoted) as the operator function's REF argument.
+#                   Format:
+#                       "func_name \"arg1\" ... \"arg2\" REF \"arg3\" ... "
+#   tokenize=...  - Select an operating mode. See above.
+#   in_delim      - (Optional): Character to split the input into tokens. Defaults to $'\n'.
+#   out_delim     - (Optional): String to place between each modified token in the output. Defaults to $'\n' .
+#   REF           - Variable name for pass-by-reference (unquoted).
+#                   If REF is supplied, operate_on_each reads from REF's contents instead of stdin.
+#                   The REF variable CANNOT be named any of the following: _ref _out _in
+#   <&0           - If REF not supplied, reads from stdin.
 # Outputs:
-#   REF       - If variable name supplied, returns output into REF.
-#   >         - If REF not supplied, outputs to stdout.
+#   REF           - If variable name supplied, returns output directly into REF.
+#   >&1           - If REF not supplied, outputs to stdout.
 #
 function operate_on_each(){
     if [[ "$1" == "" ]]; then return_error "No function specified."
-    else                      local -n func=$1
+    else                      local function_call=$1
     fi
-    if [[ "$2" == "" ]]; then return_error "No input delimiters specified."
-    else                      local in_delims="$2"
+    if [[ "$2" == "" ]]; then return_error "No tokenization specified."
+    elif [[ "$2" == "tokenize=stdin" ]];  then local tokenize="stdin"
+        if [[ "$3" == "" ]]; then local in_delim=$'\n'
+        else                      local in_delim="$3"
+        fi
+        if [[ "$4" == "" ]]; then local out_delim=$'\n'
+        else                      local out_delim="$4"
+        fi
+    elif [[ "$2" == "tokenize=string" ]]; then local tokenize="string"
+        if [[ "$3" == "" ]]; then return_error "No string variable REF specified."
+        else                      local -n _ref=$3
+        fi
+        if [[ "$4" == "" ]]; then local in_delim=$'\n'
+        else                      local in_delim="$4"
+        fi
+        if [[ "$5" == "" ]]; then local out_delim=$'\n'
+        else                      local out_delim="$5"
+        fi
+    elif [[ "$2" == "tokenize=array" ]];  then local tokenize="array"
+        if [[ "$3" == "" ]]; then return_error "No array variable REF specified."
+        else                      local -n _ref=$3
+        fi
+    else                      return_error "Invalid tokenization parameter."
     fi
-    if [[ "$3" == "" ]]; then return_error "No output delimiters specified."
-    else                      local out_delim="$3"
+
+    if [[ "$tokenize" == "stdin" ]]; then
+        local REF
+
+        while IFS="$in_delim" read -r REF || [ -n "$REF" ]; do
+            $function_call
+            builtin printf '%s%s' "$REF" "$out_delim"
+        done
+
+    elif [[ "$tokenize" == "string" ]]; then
+        local REF _out _in="$_ref"
+
+        while IFS="$in_delim" read -d "$in_delim" -r REF || [ -n "$REF" ]; do
+            $function_call
+            builtin printf -v _out '%s%s%s' "$_out" "$REF" "$out_delim"
+        done < <(printf '%s' "$_in")
+        _ref="$_out"
+
+    elif [[ "$tokenize" == "array" ]]; then
+        local REF idx
+
+        for idx in ${!_ref[@]}; do
+            REF="${_ref[$idx]}"
+            $function_call
+            _ref[$idx]="$REF"
+        done
+
     fi
-    if [[ "$4" == "" ]]; then local _ref=""
-                              local _in=""
-                              local _out=""
-                              local printf_opts=""
-                              local source_pipe=""
-    else                      local -n _ref=$4;
-                              local _in="$ref"
-                              local _out=""
-                              local printf_opts="-v _out"
-                              local source_pipe='printf %s "$_in" | \'
+}
+
+# str_to_arr {ARR_REF} [in_delim [STR_REF]]
+#   Splits a string into tokens, then appends each token to an array variable.
+# Inputs:
+#   ARR_REF     - Name of array variable (unquoted) on which to append the new elements.
+#                 CANNOT be named: _arrref, _out
+#   in_delim    - Optional: Character to split the input into tokens. Defaults to $'\n'.
+#   STR_REF     - Optional: Name of string variable (unquoted) to tokenize.
+#                 CANNOT be named: _strref, _in
+#   &0 (stdin)  - If STR_REF is not specified, stdin is used instead.
+# Outputs:
+#   ARR_REF     - Tokens from the string are appended to ARR_REF.
+#
+function str_to_arr(){
+    if [[ "$1" == "" ]]; then return_error "No array variable specified"
+    else                      local -n _arrref=$1
+                              local -a _out=()
+    fi
+    if [[ "$2" == "" ]]; then local in_delim=$'\n'
+    else                      local in_delim="$2"
+    fi
+    if [[ "$3" == "" ]]; then local _strref="__unset"
+                              local fid=0
+    else                      local -n _strref=$3
+                              local fid=3
     fi
 
     local tok
-    $source_pipe
-    while IFS="$in_delims" read -r tok; do
-        func "$tok"
-        builtin printf $printf_opts '%s%s%s' "$_out" "$out_delim" "$tok"
-    done
-
-    [ -z $_ref ] || _ref="$_out"
+    while IFS="$in_delim" read -d "$in_delim" -r tok <&${fid} || [ -n "$tok" ]; do
+        _out+=( "$tok" )
+    done 3< <(printf '%s' "$_strref")
+    exec 3<&-
+    _arrref=("${_arrref[@]}" "${_out[@]}")
 }
 
-# trim_str {REF}
-#   REF - Variable name to reference; CANNOT be named: _ref _out _in
-function trim_str(){
-    local -n _ref=$1
-    local _in="$_ref"
-    local _out=""
 
+# arr_to_str {ARR_REF} [out_delim [STR_REF]]
+#   Converts an array variable to a string, separating each element with out_delim.
+# Inputs:
+#   ARR_REF     - Name of array variable (unquoted).
+#                 CANNOT be named: _arrref
+#   out_delim   - Optional: String to separate each array element in the resulting string. Defaults to \n.
+#   STR_REF     - Optional: Name of string variable (unquoted) in which to store the resulting string.
+#                 CANNOT be named: _strref
+# Outputs:
+#   &1 (stdout) - If STR_REF is not specified, prints the resulting string to stdout.
+#   STR_REF     - If STR_REF is specified, passes the resulting string by-reference.
+#
+function arr_to_str(){
+    if [[ "$1" == "" ]]; then return_error "No array variable specified"
+    else                      local -n _arrref=$1
+    fi
+    if [[ "$2" == "" ]]; then local out_delim=$'\n'
+    else                      local out_delim="$2"
+    fi
+    if [[ "$3" != "" ]]; then local -n _strref=$3
+                              local printf_args="-v _strref"
+    fi
+
+    builtin printf $printf_args "%s$out_delim" "${_arrref[@]}"
+}
+
+# print_arr {ARR_REF} [out_delim]
+#   Prints the contents of an array element-by-element, numbering each one (for visual purposes)
+# Inputs:
+#   ARR_REF     - Name of array variable (unquoted).
+#                 CANNOT be named: _arrref
+#   out_delim   - Optional: String to separate each array element in the resulting string. Defaults to \n.
+# Outputs:
+#   &1 (stdout) - Prints the array's contents to stdout.
+#
+function print_arr(){
+    if [[ "$1" == "" ]]; then return_error "No array variable specified"
+    else                      local -n _arrref=$1
+    fi
+    if [[ "$2" == "" ]]; then local out_delim=$'\n'
+    else                      local out_delim="$2"
+    fi
+
+    local idx
+    for idx in ${!_arrref[@]}; do
+        printf '%4d: [%s]%s' "$idx" "${_arrref[$idx]}" "$out_delim"
+    done
+}
+
+
+# trim [STR_REF]
+#   Removes leading and trailing whitespace from a string (including newlines)
+# Inputs:
+#   STR_REF     - Optional: Name of variable (unquoted) to trim.
+#                 CANNOT be named: _strref _out _in
+#   &0 (stdin)  - If STR_REF is not specified, stdin is used instead.
+# Outputs:
+#   STR_REF     - Returns trimmed string back into REF.
+#   &1 (stdout) - Prints the array's contents to stdout.
+#
+function trim(){
+    if [[ "$1" == "" ]]; then local _strref="__unset"
+    else                      local -n _strref=$1
+                              local printf_args="-v _strref"
+    fi
+
+    local _in _out  # Set _in from stdin or the pass-by-reference
+    if [[ "$_strref" == "__unset" ]]; then
+        read -d '' -r _in
+    else
+        _in="$_strref"
+    fi
+
+    # _out is a function of _in
     _in="${_in#"${_in%%[![:space:]]*}"}"
     _in="${_in%"${_in##*[![:space:]]}"}"
     _out="$_in"
 
-    [ -z $_ref ] || _ref="$_out"
-}
-
-# trim [REF]
-#   Trims leading and trailing whitespace from each line of input.
-# Example:
-#   echo "  string_with_whitespace  " | trim
-#   trim MY_VAR
-# Inputs:
-#   REF     - If variable name supplied, trim operates line-by-line on REF's contents.
-#   <       - If REF not supplied, trim operates line-by-line on stdin.
-# Outputs:
-#   REF     - If variable name supplied, trim returns output into REF.
-#   >       - If REF not supplied, trim outputs to stdout.
-#
-function trim() {
-    if [ $# == 0 ]; then    local OUT=""
-                            local STDIN=0
-    elif [ $# == 1 ]; then  local -n OUT=$1
-                            local STDIN=1
-    else                    return_error "Invalid number of arguments."
-    fi
+    # Print _out to either stdout or the pass-by-reference
+    builtin printf $printf_args "%s" "$_out"
 }
 
 function git_reset_pull()
@@ -268,11 +386,6 @@ function git_reset_pull()
     fi
 }
 
-
-function newlines_to_spaces()
-{
-    echo "$1" | tr '\n' ' '
-}
 
 # replace_line {file} {search_str} {replace_str} [match=whole/partial [sudo=true/false]]
 #   Scans for a line matching str, then replaces the entire line in-place.
