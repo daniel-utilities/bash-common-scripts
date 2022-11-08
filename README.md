@@ -15,9 +15,16 @@ Call any function like:
 func_name "arg1" "arg2" ...
 ```
 
-If a function returns data on stdout, capture the output with:
+If a function argument is listed as REF, this argument is pass-by-reference.
+Use it by providing an unquoted variable name. The variable may be modified once the function returns.
+```
+func_name MY_VAR
+```
+
+If a function returns data on stdout, capture the output using a Subshell or pipe its output to another process:
 ```
 MY_VAR="$(func_name "arg1" "arg2" ... )"
+func_name "arg1" > file.txt
 ```
 
 In addition to stdout, a function might return data through its exit code:
