@@ -104,6 +104,47 @@ function require_systemd() {
 }
 
 
+# confirmation_prompt [prompt]
+#   Prompts the user for a Y/N input.
+# Inputs:
+#   prompt          - Optional prompt text. Defaults to "Continue?"
+#   &0 (stdin)      - Reads user input from stdin
+#   $_AUTOCONFIRM   - If $_AUTOCONFIRM == "true", will immediately return 0 without prompt.
+# Outputs:
+#   &1 (stdout)     - Writes prompt to stdout
+#   $?              - Numeric exit value; Returns 0 (success) if user has provided confirmation, 1 if not.
+#
+function confirmation_prompt() {
+    if [[ "$_AUTOCONFIRM" == "true" ]]; then return 0; fi
+    if [[ "$1" == "" ]]; then local prompt="Continue? [Y/N]: "
+    else                      local prompt="$1 [Y/N]: "
+    fi
+    unset REPLY
+    read -r -p "$prompt" 
+    if [[ "$REPLY" =~ ^[Yy]$ ]]; then return 0; else return 1; fi
+}
+
+
+# require_confirmation [prompt]
+#   Prompts the user for a Y/N input, then returns from the function which called this if the user responds negatively.
+# Inputs:
+#   prompt          - Optional prompt text. Defaults to "Continue?"
+#   &0 (stdin)      - Reads user input from stdin
+#   $_AUTOCONFIRM   - If $_AUTOCONFIRM == "true", will immediately return 0 without prompt.
+# Outputs:
+#   &1 (stdout)     - Writes prompt to stdout
+#   $?              - Numeric exit value; Returns 0 (success) if user has provided confirmation, 1 if not.
+#
+function require_confirmation() {
+    confirmation_prompt "$1"
+    if [ $? == 0 ]; then 
+        return 0
+    else
+        "${__CONFIRM:?FALSE}"
+    fi
+}
+
+
 # print_octal str
 #   Prints the octal representation of the string over top of its ASCII counterpart.
 # Example:
@@ -200,6 +241,7 @@ function extract() {
     fi
 }
 
+
 # operate_on_each {function_call} {tokenize=stdin}        [in_delim [out_delim]]
 # operate_on_each {function_call} {tokenize=string} {REF} [in_delim [out_delim]] 
 # operate_on_each {function_call} {tokenize=array}  {REF}
@@ -287,6 +329,7 @@ function operate_on_each(){
         arr_to_str __in "$out_delim" __strref
     else return_error; fi
 }
+
 
 # str_to_arr {ARR_REF} [in_delim [STR_REF]]
 #   Splits a string into tokens, then appends each token to an array variable.
