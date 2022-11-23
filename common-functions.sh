@@ -142,27 +142,62 @@ function get_user_home() {
 }
 
 
-# auto_install:  Copies files from SOURCE to DESTINATION and applies chmod +x to scripts.
+# multicopy:  Copies files from SOURCE to DESTINATION and applies chmod +x to scripts.
 # Inputs:
-#   auto_install "SOURCE_1 : DEST_1     Copies files, creating new folders if necessary.
-#                 SOURCE_2 : DEST_2 "   Will use 'sudo' if necessary to gain write privilege.
+#   multicopy "SOURCE_1 : DEST_1     Copies source files to destination.
+#              SOURCE_2 : DEST_2 "   Will use 'sudo' if necessary to gain write privilege.
 # Outputs:
 #   None
 #
-function auto_install() {
+function multicopy() {
     IFS=$'\n' declare -a 'ARR=($*)'
     for LINE in "${ARR[@]}"; do
         IFS=':' declare -a 'PAIR=($LINE)'
         local SRC=$(trim "${PAIR[0]}")
         local DST=$(trim "${PAIR[1]}")
         local DST_DIR=$(dirname "$DST")
-        echo "$SRC --> $DST"
-        mkdir -p "$DST_DIR" 2> /dev/null || sudo mkdir -p "$DST_DIR"
+        if [[ ! -d "$DST_DIR" ]]; then
+            return_error "Directory does not exist: \"$DST_DIR\""
+        fi
+        echo "Copying \"$SRC\" --> \"$DST\""
         cp -f "$SRC" "$DST" 2> /dev/null || sudo cp -f "$SRC" "$DST"
         if [[ "$SRC" == *.sh ]]; then 
             chmod +x "$DST" 2> /dev/null || sudo chmod +x "$DST"
         fi
     done
+}
+
+
+# extract {SOURCE} {DESTINATION}
+#   Extracts an archive file to a destination directory.
+# Inputs:
+#   SOURCE      - Archive filename to extract
+#   DESTINATION - Destination directory
+# Outputs:
+#   None
+#
+function extract() {
+    local SRC="$1"
+    local DST_DIR="$2"
+
+    if [[ ! -d "$DST_DIR" ]]; then
+        return_error "Directory does not exist: \"$DST_DIR\""
+    fi
+
+    local EXT=${SRC##*.}
+    if [ "$EXT" = "gz" ]; then
+        tar -zxf "$SRC" -C "$DST_DIR" || sudo tar -zxf "$SRC" -C "$DST_DIR"
+    elif [ "$EXT" = "bz2" ]; then
+        tar -jxf "$SRC" -C "$DST_DIR" || sudo tar -jxf "$SRC" -C "$DST_DIR"
+    elif [ "$EXT" = "xz" ]; then
+        tar -Jxf "$SRC" -C "$DST_DIR" || sudo tar -Jxf "$SRC" -C "$DST_DIR"
+    elif [ "$EXT" = "tar" ]; then
+        tar -xf "$SRC" -C "$DST_DIR" || sudo tar -xf "$SRC" -C "$DST_DIR"
+    elif [ "$EXT" = "zip" ]; then
+        unzip "$SRC" -d "$DST_DIR" || sudo unzip "$SRC" -d "$DST_DIR"
+    else
+      return_error "Unknown archive format ($EXT) for file: \"$SRC\""
+    fi
 }
 
 # operate_on_each {function_call} {tokenize=stdin}        [in_delim [out_delim]]
