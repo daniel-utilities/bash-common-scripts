@@ -724,6 +724,33 @@ function sysd_config_user_service() {
     fi
 }
 
+
+# sysd_config_user_service {service} {enable/disable}
+#   Configures a SystemD (systemctl) service to start automatically when the system boots.
+#   Service is run as root.
+# Inputs:
+#   service         - Name of SystemD service. Must have a .service config file in "/etc/systemd/system"
+#   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
+# Outputs:
+#   $?              - Numeric exit value; 0 indicates success.
+#
+function sysd_config_system_service() {
+    require_systemd
+
+    if [[ "$1" == "" ]]; then            return_error "No service specified."
+    else                                 local SERVICE="$1"
+    fi
+    if [[ "$2" == "" ]]; then            return_error "Need to specify enable/disable."
+    elif [[ "$2" == "enable" ]]; then    local MODE="enable"
+    elif [[ "$2" == "disable" ]]; then   local MODE="disable"
+    else                                 return_error "Need to specify enable/disable."
+    fi
+
+    sudo systemctl $MODE $SERVICE
+    sudo systemctl daemon-reload
+}
+
+
 # sysv_config_user_service {service} {enable/disable}
 #   Configures a SystemV (init.d) service to start automatically when the current user logs in.
 #   Service is always run with root privilege, not with the user privilege.
