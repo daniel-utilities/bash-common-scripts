@@ -684,7 +684,7 @@ function delete_lines_matching(){
 }
 
 
-# sysd_config_user_service {service} {enable/disable} [boot=false/true]
+# sysd_config_user_service {service} {enable/disable} [boot=false/true [start/stop]]
 #   Configures a SystemD (systemctl) service to start automatically when the current user logs in.
 #   Service is run as the current user, inheriting privilege.
 # Inputs:
@@ -692,6 +692,7 @@ function delete_lines_matching(){
 #   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
 #   boot=false/true - (Optional): if true, all of this user's services will start on system boot instead of when the user logs in.
 #                       It will still run with the user's privilege level. It will continue running when the user logs out.
+#   start/stop      - Start or stop the service in the background after applying the configuration.
 # Outputs:
 #   $?              - Numeric exit value; 0 indicates success.
 #
@@ -712,6 +713,11 @@ function sysd_config_user_service() {
     elif [[ "$3" == "boot=true" ]]; then local LINGER="enable-linger"
     else                                 return_error "Invalid boot parameter."
     fi
+    if [[ "$4" == "" ]]; then            local STARTSTOP=""
+    elif [[ "$4" == "start" ]]; then     local STARTSTOP="start"
+    elif [[ "$4" == "stop" ]]; then      local STARTSTOP="stop"
+    else                                 return_error "Invalid start parameter."
+    fi
 
     SERVICE_FILE="$HOME/.config/systemd/user/$SERVICE.service"
     [ ! -e "$SERVICE_FILE" ] && return_error "Required file $SERVICE_FILE does not exist."
@@ -722,15 +728,22 @@ function sysd_config_user_service() {
     if [[ "$LINGER" == "__unset" ]]; then
         loginctl $LINGER $USER
     fi
+
+    if [[ "$STARTSTOP" == "start" ]]; then
+        sudo systemctl --user start $SERVICE
+    elif [[ "$STARTSTOP" == "stop" ]]; then
+        sudo systemctl --user stop $SERVICE
+    fi
 }
 
 
-# sysd_config_user_service {service} {enable/disable}
+# sysd_config_system_service {service} {enable/disable} [start/stop]
 #   Configures a SystemD (systemctl) service to start automatically when the system boots.
 #   Service is run as root.
 # Inputs:
 #   service         - Name of SystemD service. Must have a .service config file in "/etc/systemd/system"
 #   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
+#   start/stop      - Start or stop the service in the background after applying the configuration.
 # Outputs:
 #   $?              - Numeric exit value; 0 indicates success.
 #
@@ -745,19 +758,31 @@ function sysd_config_system_service() {
     elif [[ "$2" == "disable" ]]; then   local MODE="disable"
     else                                 return_error "Need to specify enable/disable."
     fi
+    if [[ "$3" == "" ]]; then            local STARTSTOP=""
+    elif [[ "$3" == "start" ]]; then     local STARTSTOP="start"
+    elif [[ "$3" == "stop" ]]; then      local STARTSTOP="stop"
+    else                                 return_error "Invalid start parameter."
+    fi
 
     sudo systemctl $MODE $SERVICE
     sudo systemctl daemon-reload
+
+    if [[ "$STARTSTOP" == "start" ]]; then
+        sudo systemctl start $SERVICE
+    elif [[ "$STARTSTOP" == "stop" ]]; then
+        sudo systemctl stop $SERVICE
+    fi
 }
 
 
-# sysv_config_user_service {service} {enable/disable}
+# sysv_config_user_service {service} {enable/disable} [start/stop]
 #   Configures a SystemV (init.d) service to start automatically when the current user logs in.
 #   Service is always run with root privilege, not with the user privilege.
 #   Required for systems without systemctl (Such as WSL).
 # Inputs:
 #   service         - Name of SystemV service. Must have a launch script in /etc/init.d.
 #   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
+#   start/stop      - Start or stop the service in the background after applying the configuration.
 # Outputs:
 #   $?              - Numeric exit value; 0 indicates success.
 #
@@ -771,6 +796,11 @@ function sysv_config_user_service() {
     elif [[ "$2" == "enable" ]]; then   local MODE="enable"
     elif [[ "$2" == "disable" ]]; then  local MODE="disable"
     else                        return_error "Need to specify enable/disable."
+    fi
+    if [[ "$3" == "" ]]; then            local STARTSTOP=""
+    elif [[ "$3" == "start" ]]; then     local STARTSTOP="start"
+    elif [[ "$3" == "stop" ]]; then      local STARTSTOP="stop"
+    else                                 return_error "Invalid start parameter."
     fi
 
     local SUDOER_FILE="/etc/sudoers.d/$USER"
@@ -788,6 +818,12 @@ function sysv_config_user_service() {
         delete_lines_matching "$SUDOER_FILE" "$SUDOER_ENTRY" match=partial sudo=true
         # Remove autostart entry in ~/.profile
         delete_lines_matching "$AUTORUN_FILE" "$AUTORUN_COMMAND" match=whole
+    fi
+
+    if [[ "$STARTSTOP" == "start" ]]; then
+        (nohup sudo service $SERVICE start </dev/null >/dev/null 2>&1 &)
+    elif [[ "$STARTSTOP" == "stop" ]]; then
+        (nohup sudo service $SERVICE stop </dev/null >/dev/null 2>&1 &)
     fi
 }
 
