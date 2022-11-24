@@ -194,11 +194,13 @@ function get_user_home() {
 #   None
 #
 function multicopy() {
-    local -a _arrref=$1
+    local -n _arrref=$1
     for LINE in "${_arrref[@]}"; do
         IFS=':' declare -a 'PAIR=($LINE)'
-        local SRC=$(trim "${PAIR[0]}")
-        local DST=$(trim "${PAIR[1]}")
+        local SRC="${PAIR[0]}"
+        trim SRC
+        local DST="${PAIR[1]}"
+        trim DST
         local DST_DIR=$(dirname "$DST")
         if [[ ! -d "$DST_DIR" ]]; then
             return_error "Directory does not exist: \"$DST_DIR\""
