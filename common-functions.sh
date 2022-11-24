@@ -828,6 +828,75 @@ function sysv_config_user_service() {
 }
 
 
+# function_select_menu {ARR_REF_1} {ARR_REF_2} {title} {description}
+# Inputs:
+#   ARR_REF_1   - Name of OPTIONS array (unquoted).
+#                 OPTIONS is an associative array, where keys are menu options and values are menu descriptions.
+#                 OPTIONS array CANNOT be named: _options
+#   ARR_REF_2   - Name of FUNCTIONS array (unquoted).
+#                 FUNCTIONS is an associative array, where keys are menu options and values are function calls to be interpreted by 'eval'.
+#                 FUNCTIONS array CANNOT be named: _fncalls
+#
+function function_select_menu() {
+    local -n _options=$1
+    local -n _fncalls=$2
+    local title = "$3"
+    local description = "$4"
+
+    # run_all
+    function run_all() {
+        local _AUTOCONFIRM="true"
+        local command=""
+        keys=( $( echo ${!_fncalls[@]} | tr ' ' $'\n' | sort ) )
+        for opt in "${keys[@]}"; do
+            command="${_fncalls[$opt]}"
+
+            if [[ "$command" == "run_all"* || "$command" == "exit"* || "$command" == "return"* ]]; then
+                continue
+            fi
+
+            echo "Running command:"
+            echo "$command"
+            echo ""
+
+            eval "$command"
+        done
+    }
+
+    clear
+    while true; do
+        echo ""
+        echo "****************************************"
+        echo "  $title"
+        echo "****************************************"
+        echo ""
+        echo "$description"
+        echo ""
+        _options[0]="Run All In Order"
+        _fncalls[0]="run_all"
+        _options[r]="Return"
+        _fncalls[r]="return"
+        _options[x]="Exit"
+        _fncalls[x]="exit"
+        keys=( $( echo ${!_options[@]} | tr ' ' $'\n' | sort ) )
+        for opt in "${keys[@]}"; do
+            echo "$opt) ${_options[$opt]}"
+        done
+        echo ""
+
+        prompt="Enter an option: "
+        unset REPLY
+        command=""
+        while [[ "$command" == "" ]]; do
+            read -r -p "$prompt"
+            if [ "$REPLY" != "" ]; then command="${_fncalls[$REPLY]}"
+            else                        command=""
+            fi
+            eval "$command"
+        done
+    done
+
+}
 
 
 #####################################################################################################
