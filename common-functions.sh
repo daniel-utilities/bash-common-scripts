@@ -881,8 +881,8 @@ function function_select_menu() {
         _fncalls[0]="run_all"
         _options[r]="Return"
         _fncalls[r]="return"
-        _options[x]="Exit"
-        _fncalls[x]="exit"
+        #_options[x]="Exit"
+        #_fncalls[x]="exit"
         keys=( $( echo ${!_options[@]} | tr ' ' $'\n' | sort ) )
         for opt in "${keys[@]}"; do
             echo "$opt) ${_options[$opt]}"
