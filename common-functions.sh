@@ -840,8 +840,8 @@ function sysv_config_user_service() {
 function function_select_menu() {
     local -n _options=$1
     local -n _fncalls=$2
-    local title = "$3"
-    local description = "$4"
+    local title="$3"
+    local description="$4"
 
     # run_all
     function run_all() {
