@@ -183,16 +183,19 @@ function get_user_home() {
 }
 
 
-# multicopy:  Copies files from SOURCE to DESTINATION and applies chmod +x to scripts.
+# multicopy {ARR_REF}
+#  Copies files from multiple sources to multiple destinations and applies chmod +x to scripts.
 # Inputs:
-#   multicopy "SOURCE_1 : DEST_1     Copies source files to destination.
-#              SOURCE_2 : DEST_2 "   Will use 'sudo' if necessary to gain write privilege.
+#   ARR_REF     - Name of source/destination array (unquoted), containing strings formatted as:
+#                   declare -a ( "SOURCE_1 : DEST_1"
+#                                "SOURCE_2 : DEST_2" )        
+#                 Copies source files to destination. Will use 'sudo' if necessary to gain write privilege.
 # Outputs:
 #   None
 #
 function multicopy() {
-    IFS=$'\n' declare -a 'ARR=($*)'
-    for LINE in "${ARR[@]}"; do
+    local -a _arrref=$1
+    for LINE in "${_arrref[@]}"; do
         IFS=':' declare -a 'PAIR=($LINE)'
         local SRC=$(trim "${PAIR[0]}")
         local DST=$(trim "${PAIR[1]}")
