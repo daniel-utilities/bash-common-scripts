@@ -4,25 +4,25 @@
 			"path": "."
 		},
 		{
-			"path": "/home/daniel/daniel-utilities/docker-scripts"
+			"path": "../docker-scripts"
 		},
 		{
-			"path": "/home/daniel/daniel-utilities/mindstorms-scripts"
+			"path": "../mindstorms-scripts"
 		},
 		{
-			"path": "/home/daniel/daniel-utilities/wsl-cuda-scripts"
+			"path": "../linux-setup-scripts"
 		},
 		{
-			"path": "/home/daniel/daniel-utilities/wsl-usb-scripts"
+			"path": "../wsl-usb-scripts"
 		},
 		{
-			"path": "/home/daniel/daniel-contrib/nxtOSEK"
+			"path": "../ros-noetic-scripts"
 		},
 		{
-			"path": "/home/daniel/daniel-utilities/ros-noetic-scripts"
+			"path": "../../daniel-contrib/nxtOSEK"
 		},
 		{
-			"path": "/home/daniel/daniel-robotics/ros_catkin_ws"
+			"path": "../../daniel-robotics/ros_catkin_ws"
 		},
 	],
 	"settings": {

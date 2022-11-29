@@ -1,27 +1,108 @@
 #####################################################################################################
 #
-#       BASH WSL-2 FUNCTIONS
+#       BASH COMMON FUNCTIONS
 #       By danielk-98, 2022
 #
 #       git clone https://github.com/daniel-utilities/bash-common-scripts.git
-#       source ./bash-common-functions/common-functions.sh
+#       source ./bash-common-scripts/common-functions.sh
 #
 #####################################################################################################
+#       FUNCTION REFERENCE:
 #
-# func_name {required_arg} [optional_arg] [REF]
+# fast_argparse {returnarray} {positionalargs} {flaggedargs} {"$@"}
+#   Collects positional and flagged arguments into an associative array.
+# return_error [message]
+#   Prints an error message then returns from the function which called this.
+# is_root
+#   Checks if script is being run by root user.
+# require_root
+#   Returns from the calling function with an error message if not being run by root user.
+# require_non_root
+#   Returns from the calling function with an error message if being run by root user.
+# confirmation_prompt [prompt]
+#   Prompts the user for a Y/N input.
+# require_confirmation [prompt]
+#   Prompts the user for a Y/N input, then returns from the function which called this if the user responds negatively.
+# function_select_menu {optarrayname} {funcarrayname} {title} {description}
+#   Displays a selection menu to the user. Options map directly to function calls.
+# get_script_dir {strname}
+#   Returns the full path containing the currently-running script.
+# get_user_home {strname} [user]
+#   Gets the home directory of the specified user.
+# print_octal {str}
+#   Prints the octal representation of the string over top of its ASCII counterpart.
+# trim [strname]
+#   Removes leading and trailing whitespace from a string (including newlines)
+# print_arr {arrayname}
+#   Prints the contents of an indexed or associative array to stdout.
+# has_value {arrayname} {value}
+#   Checks if value is a member of the array.
+# has_key {arrayname} {key}
+#   Checks if "key" is a key in the array.
+# str_to_arr {arrayname} [strname] [-e element_sep] [-p pair_sep]
+#   Splits a string into tokens and appends each one to an array.
+# arr_to_str {arrayname} [strname] [-e element_sep] [-p pair_sep]
+#   Prints an array as a string. Prints members only, or as key/value pairs.
+# foreach {function_call} [-in invarname] [-out outvarname] [-e 'elem_sep'] [-p 'pair_sep'] 
+#   Runs the specified function on every token of input.
+# are_arrays_equal {arrname1} {arrname2}
+#   Compares the contents of two arrays.
+#
+#####################################################################################################
+#       FORMAT:
+# func_name {required_arg} [optional_arg]
 #   Description
 # Inputs:
-#   $GLOBALVAR  - Required global variable read by the function.
+#   $GLOBALVAR   - Required global variable read by the function.
 #   required_arg - desc
 #   optional_arg - (Optional)
-#   REF         - Variable name (non-quoted) for pass-by-reference.
+#   &0 (stdin)   - Function reads from stdin
 # Outputs:
-#   $GLOBALVAR  - Global variable written to by the function.
-#   &1 (stdout) - Function prints to standard output channel.
-#   &2 (stderr) - Function prints to standard error channel.
-#   $?          - Numeric exit value; 0 indicates success.
+#   $GLOBALVAR   - Global variable written to by the function.
+#   &1 (stdout)  - Function prints to standard output channel.
+#   &2 (stderr)  - Function prints to standard error channel.
+#   $?           - Numeric exit value; 0 indicates success.
 #
 #####################################################################################################
+
+
+
+# fast_argparse {returnarray} {positionalargs} {flaggedargs} {"$@"}
+#   Collects positional and flagged arguments into an associative array.
+# Inputs:
+#   positionalargs - String containing space-separated list of positional argument variable names.
+#   flaggedargs    - String containing space-separated list of acceptable flags
+#   "$@"           - Quoted string of all arguments.
+# Outputs:
+#   returnarray    - Name of associative array (declare -A name) in which to return the collected values.
+#                    CANNOT be named: _args
+#
+function fast_argparse() {
+    local -n _args=$1
+    local -a pos=($2)
+    local -a flg=($3)
+    shift 3
+    local flag poscnt=0
+    while [ "$#" -gt 0 ]; do
+        flag="${1##*-}"
+        if [[ "$1" == -* ]]; then   # it's a flag argument
+            if has_value flg "$flag" && [ "$#" -ge 2 ]; then   # it's a recognized flag
+                _args["$flag"]="$2"
+                shift 2
+            else
+                return_error "Invalid argument: $1 $2"
+            fi
+        else                        # it's a positional argument
+            if [ $poscnt -lt "${#pos[@]}" ]; then   # it's a recognized positional arg
+                _args["${pos[poscnt]}"]="$1"
+                ((poscnt=poscnt+1))
+                shift 1
+            else
+                return_error "Provided too many positional arguments"
+            fi
+        fi
+    done
+}
 
 
 # return_error [message]
@@ -76,34 +157,6 @@ function require_non_root() {
 }
 
 
-# is_systemd
-#   Checks if system has been initialized with systemd.
-# Outputs:
-#   $__SYSTEMD   - 
-#   $?          - Numeric exit value; 0 indicates systemd has been started.
-#
-function is_systemd() {
-    if [ -z "$__SYSTEMD" ]; then
-        systemctl list-units --type=service > /dev/null 2> /dev/null
-        export __SYSTEMD=$?
-    fi
-    return $__SYSTEMD
-}
-
-
-# require_systemd
-#   Returns from the calling function with an error message if systemd is not available.
-# Inputs:
-#   None
-# Outputs:
-#   &2 (stderr) - Function prints to standard error channel.
-#   $?          - Numeric exit value; 0 indicates this script is being run by root.
-#
-function require_systemd() {
-    is_systemd || return_error "SystemD init is required, but not available on this system."
-}
-
-
 # confirmation_prompt [prompt]
 #   Prompts the user for a Y/N input.
 # Inputs:
@@ -145,708 +198,28 @@ function require_confirmation() {
 }
 
 
-# print_octal str
-#   Prints the octal representation of the string over top of its ASCII counterpart.
-# Example:
-#   print_octal "$IFS"
+# function_select_menu {optarrayname} {funcarrayname} {title} {description}
+#   Displays a selection menu to the user. Options map directly to function calls.
 # Inputs:
-#   str         - String to print.
-# Outputs:
-#   &1 (stdout) - Function prints to standard output channel.
-#
-function print_octal() {
-    printf '%s' "$1" | od -bc
-}
-
-
-# get_script_dir
-#   Returns the full path containing the currently-running script.
-# Inputs:
-#   $0              - Script directory is recovered from the $0 command line argument.
-# Outputs:
-#   $_SCRIPT_DIR    - Global var containing parent directory of the script.
-#
-function get_script_dir(){
-    _SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-}
-
-
-# get_user_home {user}
-#   Gets the home directory of the specified user.
-# Inputs:
-#   user        - Username
-# Outputs:
-#   $_HOME      - Variable containing the home directory of the user, or "" (empty) if not found.
-#
-function get_user_home() {
-    _HOME="$( getent passwd "$USER" | cut -d: -f6 )"
-}
-
-
-# multicopy {ARR_REF}
-#  Copies files from multiple sources to multiple destinations and applies chmod +x to scripts.
-# Inputs:
-#   ARR_REF     - Name of source/destination array (unquoted), containing strings formatted as:
-#                   declare -a ( "SOURCE_1 : DEST_1"
-#                                "SOURCE_2 : DEST_2" )        
-#                 Copies source files to destination. Will use 'sudo' if necessary to gain write privilege.
-# Outputs:
-#   None
-#
-function multicopy() {
-    local -n _arrref=$1
-    for LINE in "${_arrref[@]}"; do
-        IFS=':' declare -a 'PAIR=($LINE)'
-        local SRC="${PAIR[0]}"
-        trim SRC
-        local DST="${PAIR[1]}"
-        trim DST
-        local DST_DIR=$(dirname "$DST")
-        if [[ ! -d "$DST_DIR" ]]; then
-            return_error "Directory does not exist: \"$DST_DIR\""
-        fi
-        echo "Copying \"$SRC\" --> \"$DST\""
-        cp -f "$SRC" "$DST" 2> /dev/null || sudo cp -f "$SRC" "$DST"
-        if [[ "$SRC" == *.sh ]]; then 
-            chmod +x "$DST" 2> /dev/null || sudo chmod +x "$DST"
-        fi
-    done
-}
-
-
-# extract {SOURCE} {DESTINATION}
-#   Extracts an archive file to a destination directory.
-# Inputs:
-#   SOURCE      - Archive filename to extract
-#   DESTINATION - Destination directory
-# Outputs:
-#   None
-#
-function extract() {
-    local SRC="$1"
-    local DST_DIR="$2"
-
-    if [[ ! -d "$DST_DIR" ]]; then
-        return_error "Directory does not exist: \"$DST_DIR\""
-    fi
-
-    local EXT=${SRC##*.}
-    if [ "$EXT" = "gz" ]; then
-        tar -zxf "$SRC" -C "$DST_DIR" || sudo tar -zxf "$SRC" -C "$DST_DIR"
-    elif [ "$EXT" = "bz2" ]; then
-        tar -jxf "$SRC" -C "$DST_DIR" || sudo tar -jxf "$SRC" -C "$DST_DIR"
-    elif [ "$EXT" = "xz" ]; then
-        tar -Jxf "$SRC" -C "$DST_DIR" || sudo tar -Jxf "$SRC" -C "$DST_DIR"
-    elif [ "$EXT" = "tar" ]; then
-        tar -xf "$SRC" -C "$DST_DIR" || sudo tar -xf "$SRC" -C "$DST_DIR"
-    elif [ "$EXT" = "zip" ]; then
-        unzip "$SRC" -d "$DST_DIR" || sudo unzip "$SRC" -d "$DST_DIR"
-    else
-      return_error "Unknown archive format ($EXT) for file: \"$SRC\""
-    fi
-}
-
-
-# operate_on_each {function_call} {tokenize=stdin}        [in_delim [out_delim]]
-# operate_on_each {function_call} {tokenize=string} {REF} [in_delim [out_delim]] 
-# operate_on_each {function_call} {tokenize=array}  {REF}
-#   Runs the specified function on every token of input.
-#   Three operating modes:
-#       tokenize=stdin :   Scans stdin, separates into tokens according to in_delim.
-#                          Applies function_call to each token, then writes each modified token to stdout.
-#       tokenize=string :  Assumes REF is a string. Separates REF into tokens according to in_delim.
-#                          Applies function_call to each token, then writes each modified token back to REF in sequence.
-#       tokenize=array :   Assumes REF is an array. Applies function_call to each element of REF.
-#   WARNING: REF variables do not work when pipes are connected to the function's stdin!
-#   Always use process substitution instead.
-#   Example:
-#       $operate_on_each 'trim REF' tokenize=stdin ' ' < <(printf "$str")
-# Inputs:
-#   function_call - String containing function call to run on each token of input.
-#                   Function must support at least one REF (pass-by-reference) argument.
-#                   Write a literal REF (unquoted) as the operator function's REF argument.
-#                   Format:
-#                       "func_name \"arg1\" ... \"arg2\" REF \"arg3\" ... "
-#   tokenize=...  - Select an operating mode. See above.
-#   in_delim      - (Optional): Character to split the input into tokens. Defaults to $'\n'.
-#   out_delim     - (Optional): String to place between each modified token in the output. Defaults to $'\n' .
-#   REF           - Variable name for pass-by-reference (unquoted).
-#                   If REF is supplied, operate_on_each reads from REF's contents instead of stdin.
-#                   The REF variable CANNOT be named: _arrref __arrref _strref __strref _in __in _out __out
-#   <&0           - If REF not supplied, reads from stdin.
-# Outputs:
-#   REF           - If variable name supplied, returns output directly into REF.
-#   >&1           - If REF not supplied, outputs to stdout.
-#
-function operate_on_each(){
-    if [[ "$1" == "" ]]; then return_error "No function specified."
-    else                      local function_call=$1
-    fi
-    if [[ "$2" == "" ]]; then return_error "No tokenization specified."
-    elif [[ "$2" == "tokenize=stdin" ]];  then local tokenize="stdin"
-        if [[ "$3" == "" ]]; then local in_delim=$'\n'
-        else                      local in_delim="$3"
-        fi
-        if [[ "$4" == "" ]]; then local out_delim=$'\n'
-        else                      local out_delim="$4"
-        fi
-    elif [[ "$2" == "tokenize=string" ]]; then local tokenize="string"
-        if [[ "$3" == "" ]]; then return_error "No string variable REF specified."
-        else                      local -n __strref=$3
-        fi
-        if [[ "$4" == "" ]]; then local in_delim=$'\n'
-        else                      local in_delim="$4"
-        fi
-        if [[ "$5" == "" ]]; then local out_delim=$'\n'
-        else                      local out_delim="$5"
-        fi
-    elif [[ "$2" == "tokenize=array" ]];  then local tokenize="array"
-        if [[ "$3" == "" ]]; then return_error "No array variable REF specified."
-        else                      local -n __arrref=$3
-        fi
-    else                      return_error "Invalid tokenization parameter: $2"
-    fi
-
-    # Create input array
-    local -a __in=()
-    if [[ "$tokenize" == "array" ]]; then    # input array is copy of pass-by-ref
-        __in=("${__arrref[@]}") 
-    elif [[ "$tokenize" == "stdin" ]]; then  # input array is read from stdin
-        str_to_arr __in "$in_delim"
-    elif [[ "$tokenize" == "string" ]]; then # input array is read from string pass-by-ref
-        str_to_arr __in "$in_delim" __strref
-    else return_error; fi
-
-    # Operate on each element of input array
-    local REF idx
-    for idx in ${!__in[@]}; do
-        REF="${__in[$idx]}"
-        $function_call
-        __in[$idx]="$REF"
-    done
-
-    # Return modified array
-    if [[ "$tokenize" == "array" ]]; then  # return copy of modified array thru array pass-by-ref
-        __arrref=("${__in[@]}") 
-    elif [[ "$tokenize" == "stdin" ]]; then    # return serialized array thru stdout
-        arr_to_str __in "$out_delim"
-    elif [[ "$tokenize" == "string" ]]; then # return serialized array thru string pass-by-ref
-        arr_to_str __in "$out_delim" __strref
-    else return_error; fi
-}
-
-
-# str_to_arr {ARR_REF} [in_delim [STR_REF]]
-#   Splits a string into tokens, then appends each token to an array variable.
-#   Discards empty tokens.
-#   WARNING: REF variables do not work when pipes are connected to the function's stdin!
-#   Always use process substitution instead.
-#   Example:
-#       $str_to_arr arr ' ' < <(printf "$str")
-# Inputs:
-#   ARR_REF     - Name of array variable (unquoted) on which to append the new elements.
-#                 CANNOT be named: _arrref, _in, _out
-#   in_delim    - Optional: Character to split the input into tokens. Defaults to $'\n'.
-#   STR_REF     - Optional: Name of string variable (unquoted) to tokenize.
-#                 CANNOT be named: _strref, _in, _out
-#   &0 (stdin)  - If STR_REF is not specified, stdin is used instead.
-# Outputs:
-#   ARR_REF     - Tokens from the string are appended to ARR_REF.
-#
-function str_to_arr(){
-    if [[ "$1" == "" ]]; then return_error "No array variable specified"
-    else                      local -n _arrref=$1
-                              local -a _in=("${_arrref[@]}") _out=()
-    fi
-    if [[ "$2" == "" ]]; then local in_delim=$'\n'
-    else                      local in_delim="$2"
-    fi
-    if [[ "$3" == "" ]]; then local _strref="__unset"
-                              local fid=0
-    else                      local -n _strref=$3
-                              local fid=3
-    fi
-
-    local tok
-    while IFS="$in_delim" read -d "$in_delim" -r tok <&${fid} || [ -n "$tok" ]; do
-        #echo "tok: [$tok]"
-        [ -z "$tok" ] || _out+=( "$tok" )
-    done 3< <(printf '%s' "$_strref")
-    exec 3<&-
-    _arrref=("${_in[@]}" "${_out[@]}")
-}
-
-
-# arr_to_str {ARR_REF} [out_delim [STR_REF]]
-#   Converts an array variable to a string, separating each element with out_delim.
-# Inputs:
-#   ARR_REF     - Name of array variable (unquoted).
-#                 CANNOT be named: _arrref
-#   out_delim   - Optional: String to separate each array element in the resulting string. Defaults to \n.
-#   STR_REF     - Optional: Name of string variable (unquoted) in which to store the resulting string.
-#                 CANNOT be named: _strref
-# Outputs:
-#   &1 (stdout) - If STR_REF is not specified, prints the resulting string to stdout.
-#   STR_REF     - If STR_REF is specified, passes the resulting string by-reference.
-#
-function arr_to_str(){
-    if [[ "$1" == "" ]]; then return_error "No array variable specified"
-    else                      local -n _arrref=$1
-    fi
-    if [[ "$2" == "" ]]; then local out_delim=$'\n'
-    else                      local out_delim="$2"
-    fi
-    if [[ "$3" != "" ]]; then local -n _strref=$3
-                              local printf_args="-v _strref"
-    fi
-
-    builtin printf $printf_args "%s$out_delim" "${_arrref[@]}"
-}
-
-# print_arr {ARR_REF} [out_delim]
-#   Prints the contents of an array element-by-element, numbering each one (for visual purposes)
-# Inputs:
-#   ARR_REF     - Name of array variable (unquoted).
-#                 CANNOT be named: __arrref
-#   out_delim   - Optional: String to separate each array element in the resulting string. Defaults to \n.
-# Outputs:
-#   &1 (stdout) - Prints the array's contents to stdout.
-#
-function print_arr(){
-    if [[ "$1" == "" ]]; then return_error "No array variable specified"
-    else                      local -n __arrref=$1
-    fi
-    if [[ "$2" == "" ]]; then local out_delim=$'\n'
-    else                      local out_delim="$2"
-    fi
-
-    local idx
-    for idx in ${!__arrref[@]}; do
-        printf '%4d: [%s]%s' "$idx" "${__arrref[$idx]}" "$out_delim"
-    done
-}
-
-# arrays_are_equal {ARR_REF_1} {ARR_REF_2}
-#   Compares the contents of two arrays.
-# Inputs:
-#   ARR_REF_1   - Name of array variable (unquoted).
-#                 CANNOT be named: _arrref1
-#   ARR_REF_2   - Name of array variable (unquoted).
-#                 CANNOT be named: _arrref2
-# Outputs:
-#   $?          - Numeric exit code. 0 if every array element in ARR_1 is the same as ARR_2, 1 if otherwise.
-#
-function arrays_are_equal(){
-    if [[ "$1" == "" ]]; then return_error "No array variable specified"
-    else                      local -n _arrref1=$1
-    fi
-    if [[ "$2" == "" ]]; then return_error "No array variable specified"
-    else                      local -n _arrref2=$2
-    fi
-
-    # check if same size
-    if [[ "${#_arrref1[@]}" != "${#_arrref2[@]}" ]]; then return 1; fi
-
-    # check elements match 1-1 
-    local idx elem1 elem2
-    for idx in ${!_arrref1[@]}; do
-        elem1="${_arrref1[$idx]}"
-        elem2="${_arrref2[$idx]}"
-        if [[ "$elem1" != "$elem2" ]]; then return 1; fi
-    done
-    return 0
-}
-
-
-# trim [STR_REF]
-#   Removes leading and trailing whitespace from a string (including newlines)
-#   WARNING: REF variables do not work when pipes are connected to the function's stdin!
-#   Always use process substitution instead.
-#   Example:
-#       trim < <(printf "$str")
-# Inputs:
-#   STR_REF     - Optional: Name of variable (unquoted) to trim.
-#                 CANNOT be named: _strref _out _in
-#   &0 (stdin)  - If STR_REF is not specified, stdin is used instead.
-# Outputs:
-#   STR_REF     - Returns trimmed string back into REF.
-#   &1 (stdout) - Prints the array's contents to stdout.
-#
-function trim(){
-    if [[ "$1" == "" ]]; then local _strref="__unset"
-    else                      local -n _strref=$1
-                              local printf_args="-v _strref"
-    fi
-
-    local _in _out  # Set _in from stdin or the pass-by-reference
-    if [[ "$_strref" == "__unset" ]]; then
-        read -d '' -r _in
-    else
-        _in="$_strref"
-    fi
-
-    # _out is a function of _in
-    _in="${_in#"${_in%%[![:space:]]*}"}"
-    _in="${_in%"${_in##*[![:space:]]}"}"
-    _out="$_in"
-
-    # Print _out to either stdout or the pass-by-reference
-    builtin printf $printf_args "%s" "$_out"
-}
-
-function git_reset_pull()
-{
-    local URL="$1"
-    local BRANCH="$2"
-    
-    local EXT="${URL##*.}"
-    local DIR="$(basename "$URL" .$EXT)"
-
-    if [ -d "$DIR" ]; then
-        cd "$DIR"
-        git fetch --all
-        git reset --hard origin/$BRANCH
-        git pull
-        cd ..
-    else
-        git clone "$URL"
-    fi
-}
-
-
-# replace_line {file} {search_str} {replace_str} [match=whole/partial [sudo=true/false]]
-#   Scans for a line matching str, then replaces the entire line in-place.
-# Inputs:
-#   file        - File to edit.
-#   search_str  - String to search for in file. Can be a regex.
-#   replace_str - String to replace line with, on every line matching search_str.
-#   match=whole/partial - (Optional) Whole line must match str, or only part. Defaults to match=whole.
-#   sudo=true/false - (Optional); use sudo to read and write file.
-# Outputs:
-#   &1 (stdout) - Function prints to standard output channel.
-#   $?          - Numeric exit value; 0 indicates success.
-#
-function ensure_line(){
-    if [[ "$1" == "" ]]; then return_error "No file specified"
-    else                      local FILE="$1"
-    fi
-    if [[ "$2" == "" ]]; then return_error "No string specified"
-    else                      local LINE="$2"
-    fi
-    if [[ "$3" == "" ]]; then local GREP_FLAGS="-x"
-    elif [[ "$3" == "match=whole" ]];   then local GREP_FLAGS="-x"
-    elif [[ "$3" == "match=partial" ]]; then local GREP_FLAGS=""
-    else                      return_error "Invalid match parameter: $3"
-    fi
-    if [[ "$4" == "sudo=true" ]]; then local SUDO_COMMAND="sudo"
-    else                      local SUDO_COMMAND=""
-    fi
-
-    $SUDO_COMMAND touch "$FILE" 2>/dev/null || return_error "$FILE is not writeable."
-    $SUDO_COMMAND test -r "$FILE" || return_error "$FILE is not readable."
-
-    $SUDO_COMMAND sed -i "s#$SEARCH#$REPLACE#" "$FILE"
-    if ! $SUDO_COMMAND grep $GREP_FLAGS -qF "$LINE" "$FILE"; then
-        echo "Appending line to $FILE:"
-        echo "$LINE"
-        echo "$LINE" | $SUDO_COMMAND tee -a "$FILE" > /dev/null
-    else
-        echo "$FILE already contains at least one line matching:"
-        echo "$LINE"
-    fi
-}
-
-# Read parameter values with "${params[$name]}"
-function parse_name_value_pairs(){
-    declare -A params
-    while IFS=$'[ \t]*=[ \t]*' read -r name value
-    do
-        params[$name]="$value"
-    done
-}
-
-
-# ensure_line {file} {str} [match=whole/partial [sudo=true/false]]
-#   Appends a line to the file, if line does not exist. Whole line must match.
-#   Creates file if it does not exist. Does not create parent directories.
-# Inputs:
-#   file        - File to append line; creates file if it does not exist.
-#   str         - String to append to the file. Newline character not needed. (Not a regex)
-#   match=whole/partial - (Optional) Whole line must match str, or only part. Defaults to match=whole.
-#   sudo=true/false - (Optional); use sudo to read and write file.
-# Outputs:
-#   &1 (stdout) - Function prints to standard output channel.
-#   $?          - Numeric exit value; 0 indicates success.
-#
-function ensure_line(){
-    if [[ "$1" == "" ]]; then return_error "No file specified"
-    else                      local FILE="$1"
-    fi
-    if [[ "$2" == "" ]]; then return_error "No string specified"
-    else                      local LINE="$2"
-    fi
-    if [[ "$3" == "" ]]; then local GREP_FLAGS="-x"
-    elif [[ "$3" == "match=whole" ]];   then local GREP_FLAGS="-x"
-    elif [[ "$3" == "match=partial" ]]; then local GREP_FLAGS=""
-    else                      return_error "Invalid match parameter: $3"
-    fi
-    if [[ "$4" == "sudo=true" ]]; then local SUDO_COMMAND="sudo"
-    else                      local SUDO_COMMAND=""
-    fi
-
-    $SUDO_COMMAND touch "$FILE" 2>/dev/null || return_error "$FILE is not writeable."
-    $SUDO_COMMAND test -r "$FILE" || return_error "$FILE is not readable."
-
-    if ! $SUDO_COMMAND grep $GREP_FLAGS -qF "$LINE" "$FILE"; then
-        echo "Appending line to $FILE:"
-        echo "$LINE"
-        echo "$LINE" | $SUDO_COMMAND tee -a "$FILE" > /dev/null
-    else
-        echo "$FILE already contains at least one line matching:"
-        echo "$LINE"
-    fi
-}
-
-
-# ensure_line_visudo {file} {str} [match=whole/partial]
-#   Appends a line to the file using the "visudo" utility, if line does not exist. Whole line must match.
-#   visudo is the intended method for editing /etc/sudoers and /etc/sudoers.d/*.
-#   Creates file if it does not exist.
-# Inputs:
-#   file        - File to append line; creates file if it does not exist. Should be /etc/sudoers or /etc/sudoers.d/...
-#   str         - String to append to the file. Newline character not needed.
-#   match=whole/partial - (Optional) Whole line must match str, or only part. Defaults to match=whole.
-# Outputs:
-#   &1 (stdout) - Function prints to standard output channel.
-#   $?          - Numeric exit value; 0 indicates success.
-#
-function ensure_line_visudo(){
-    if [[ "$1" == "" ]]; then return_error "No file specified"
-    else                      local FILE="$1"
-    fi
-    if [[ "$2" == "" ]]; then return_error "No string specified"
-    else                      local LINE="$2"
-    fi
-    if [[ "$3" == "" ]]; then local GREP_FLAGS="-x"
-    elif [[ "$3" == "match=whole" ]];   then local GREP_FLAGS="-x"
-    elif [[ "$3" == "match=partial" ]]; then local GREP_FLAGS=""
-    else                      return_error "Invalid match parameter: $3"
-    fi
-    local SUDO_COMMAND="sudo"
-
-    $SUDO_COMMAND touch "$FILE" 2>/dev/null || return_error "$FILE is not writeable."
-    if ! $SUDO_COMMAND grep $GREP_FLAGS -qF "$LINE" "$FILE"; then
-        echo "Appending line to $FILE:"
-        echo "$LINE"
-        echo "$LINE" | $SUDO_COMMAND EDITOR='tee -a' visudo -f "$FILE" > /dev/null
-    else
-        echo "$FILE already contains at least one line matching:"
-        echo "$LINE"
-    fi
-}
-
-
-# delete_lines_matching {file} {str} [match=whole/partial [sudo=true/false]]
-#   Removes a single line from the file.
-# Inputs:
-#   file        - File to append line; creates file if it does not exist.
-#   str         - String to match against each line in the file. (Not a regex)
-#   match=whole/partial - (Optional) Whole line must match str, or only part. Defaults to match=whole.
-#   sudo=true/false - (Optional); use sudo to read and write file.
-# Outputs:
-#   &1 (stdout) - Function prints to standard output channel.
-#   $?          - Numeric exit value; 0 indicates success.
-#
-function delete_lines_matching(){
-    if [[ "$1" == "" ]]; then return_error "No file specified"
-    else                      local FILE="$1"
-    fi
-    if [[ "$2" == "" ]]; then return_error "No string specified"
-    else                      local LINE="$2"
-    fi
-    if [[ "$3" == "" ]]; then local GREP_FLAGS="-x"
-    elif [[ "$3" == "match=whole" ]];   then local GREP_FLAGS="-x"
-    elif [[ "$3" == "match=partial" ]]; then local GREP_FLAGS=""
-    else                      return_error "Invalid match parameter: $3"
-    fi
-    if [[ "$4" == "sudo=true" ]]; then local SUDO_COMMAND="sudo"
-    else                      local SUDO_COMMAND=""
-    fi
-
-    $SUDO_COMMAND test -e "$FILE" || return_error "$FILE does not exist."
-    $SUDO_COMMAND test -w "$FILE" || return_error "$FILE is not writeable."
-    $SUDO_COMMAND test -r "$FILE" || return_error "$FILE is not readable."
-
-    if $SUDO_COMMAND grep $GREP_FLAGS -qF "$LINE" "$FILE"; then
-        echo "Removing matching lines from $FILE:"
-        echo "$LINE"
-        $SUDO_COMMAND grep $GREP_FLAGS -v "$LINE" "$FILE" | $SUDO_COMMAND tee "$FILE.tmp" > /dev/null
-        $SUDO_COMMAND mv "$FILE.tmp" "$FILE"
-    else
-        echo "$FILE does not contain any line matching:"
-        echo "$LINE"
-    fi
-}
-
-
-# sysd_config_user_service {service} {enable/disable} [boot=false/true [start/stop]]
-#   Configures a SystemD (systemctl) service to start automatically when the current user logs in.
-#   Service is run as the current user, inheriting privilege.
-# Inputs:
-#   service         - Name of SystemD service. Must have a .service config file in "$HOME/.config/systemd/user/"
-#   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
-#   boot=false/true - (Optional): if true, all of this user's services will start on system boot instead of when the user logs in.
-#                       It will still run with the user's privilege level. It will continue running when the user logs out.
-#   start/stop      - Start or stop the service in the background after applying the configuration.
-# Outputs:
-#   $?              - Numeric exit value; 0 indicates success.
-#
-function sysd_config_user_service() {
-    require_non_root
-    require_systemd
-
-    if [[ "$1" == "" ]]; then            return_error "No service specified."
-    else                                 local SERVICE="$1"
-    fi
-    if [[ "$2" == "" ]]; then            return_error "Need to specify enable/disable."
-    elif [[ "$2" == "enable" ]]; then    local MODE="enable"
-    elif [[ "$2" == "disable" ]]; then   local MODE="disable"
-    else                                 return_error "Need to specify enable/disable."
-    fi
-    if [[ "$3" == "" ]]; then            local LINGER="__unset"
-    elif [[ "$3" == "boot=false" ]]; then local LINGER="disable-linger"
-    elif [[ "$3" == "boot=true" ]]; then local LINGER="enable-linger"
-    else                                 return_error "Invalid boot parameter."
-    fi
-    if [[ "$4" == "" ]]; then            local STARTSTOP=""
-    elif [[ "$4" == "start" ]]; then     local STARTSTOP="start"
-    elif [[ "$4" == "stop" ]]; then      local STARTSTOP="stop"
-    else                                 return_error "Invalid start parameter."
-    fi
-
-    SERVICE_FILE="$HOME/.config/systemd/user/$SERVICE.service"
-    [ ! -e "$SERVICE_FILE" ] && return_error "Required file $SERVICE_FILE does not exist."
-
-    systemctl --user $MODE $SERVICE
-    systemctl --user daemon-reload
-
-    if [[ "$LINGER" == "__unset" ]]; then
-        loginctl $LINGER $USER
-    fi
-
-    if [[ "$STARTSTOP" == "start" ]]; then
-        sudo systemctl --user start $SERVICE
-    elif [[ "$STARTSTOP" == "stop" ]]; then
-        sudo systemctl --user stop $SERVICE
-    fi
-}
-
-
-# sysd_config_system_service {service} {enable/disable} [start/stop]
-#   Configures a SystemD (systemctl) service to start automatically when the system boots.
-#   Service is run as root.
-# Inputs:
-#   service         - Name of SystemD service. Must have a .service config file in "/etc/systemd/system"
-#   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
-#   start/stop      - Start or stop the service in the background after applying the configuration.
-# Outputs:
-#   $?              - Numeric exit value; 0 indicates success.
-#
-function sysd_config_system_service() {
-    require_systemd
-
-    if [[ "$1" == "" ]]; then            return_error "No service specified."
-    else                                 local SERVICE="$1"
-    fi
-    if [[ "$2" == "" ]]; then            return_error "Need to specify enable/disable."
-    elif [[ "$2" == "enable" ]]; then    local MODE="enable"
-    elif [[ "$2" == "disable" ]]; then   local MODE="disable"
-    else                                 return_error "Need to specify enable/disable."
-    fi
-    if [[ "$3" == "" ]]; then            local STARTSTOP=""
-    elif [[ "$3" == "start" ]]; then     local STARTSTOP="start"
-    elif [[ "$3" == "stop" ]]; then      local STARTSTOP="stop"
-    else                                 return_error "Invalid start parameter."
-    fi
-
-    sudo systemctl $MODE $SERVICE
-    sudo systemctl daemon-reload
-
-    if [[ "$STARTSTOP" == "start" ]]; then
-        sudo systemctl start $SERVICE
-    elif [[ "$STARTSTOP" == "stop" ]]; then
-        sudo systemctl stop $SERVICE
-    fi
-}
-
-
-# sysv_config_user_service {service} {enable/disable} [start/stop]
-#   Configures a SystemV (init.d) service to start automatically when the current user logs in.
-#   Service is always run with root privilege, not with the user privilege.
-#   Required for systems without systemctl (Such as WSL).
-# Inputs:
-#   service         - Name of SystemV service. Must have a launch script in /etc/init.d.
-#   enable/disable  - Enable: sets service to autostart. Disable: removes service from autostarting.
-#   start/stop      - Start or stop the service in the background after applying the configuration.
-# Outputs:
-#   $?              - Numeric exit value; 0 indicates success.
-#
-function sysv_config_user_service() {
-    require_non_root
-
-    if [[ "$1" == "" ]]; then   return_error "No service specified."
-    else                        local SERVICE="$1"
-    fi
-    if [[ "$2" == "" ]]; then   return_error "Need to specify enable/disable."
-    elif [[ "$2" == "enable" ]]; then   local MODE="enable"
-    elif [[ "$2" == "disable" ]]; then  local MODE="disable"
-    else                        return_error "Need to specify enable/disable."
-    fi
-    if [[ "$3" == "" ]]; then            local STARTSTOP=""
-    elif [[ "$3" == "start" ]]; then     local STARTSTOP="start"
-    elif [[ "$3" == "stop" ]]; then      local STARTSTOP="stop"
-    else                                 return_error "Invalid start parameter."
-    fi
-
-    local SUDOER_FILE="/etc/sudoers.d/$USER"
-    local SUDOER_ENTRY="$USER ALL=(ALL) NOPASSWD: /usr/sbin/service $SERVICE *"
-    local AUTORUN_FILE="$HOME/.profile"
-    local AUTORUN_COMMAND="(nohup sudo service $SERVICE start </dev/null >/dev/null 2>&1 &)"
-
-    if [[ "$MODE" == "enable" ]]; then
-        # Need to be able to run "sudo service SERVICE start/stop" passwordlessly
-        ensure_line_visudo "$SUDOER_FILE" "$SUDOER_ENTRY" match=whole
-        # Launch service in background using ~/.profile
-        ensure_line "$AUTORUN_FILE" "$AUTORUN_COMMAND" match=whole
-    else
-        # Remove permissions from sudoer file
-        delete_lines_matching "$SUDOER_FILE" "$SUDOER_ENTRY" match=partial sudo=true
-        # Remove autostart entry in ~/.profile
-        delete_lines_matching "$AUTORUN_FILE" "$AUTORUN_COMMAND" match=whole
-    fi
-
-    if [[ "$STARTSTOP" == "start" ]]; then
-        (nohup sudo service $SERVICE start </dev/null >/dev/null 2>&1 &)
-    elif [[ "$STARTSTOP" == "stop" ]]; then
-        (nohup sudo service $SERVICE stop </dev/null >/dev/null 2>&1 &)
-    fi
-}
-
-
-# function_select_menu {ARR_REF_1} {ARR_REF_2} {title} {description}
-# Inputs:
-#   ARR_REF_1   - Name of OPTIONS array (unquoted).
-#                 OPTIONS is an associative array, where keys are menu options and values are menu descriptions.
-#                 OPTIONS array CANNOT be named: _options
-#   ARR_REF_2   - Name of FUNCTIONS array (unquoted).
-#                 FUNCTIONS is an associative array, where keys are menu options and values are function calls to be interpreted by 'eval'.
-#                 FUNCTIONS array CANNOT be named: _fncalls
+#   optarrayname  - Name of OPTIONS associative array. CANNOT be named: _options
+#                   Keys are menu options and values are menu descriptions.
+#   funcarrayname - Name of FUNCTIONS associative array. CANNOT be named: _fncalls
+#                   Keys are menu options and values are function calls to be interpreted by 'eval'.
+#   $_AUTOCONFIRM - If $_AUTOCONFIRM == "true", will run all functions in order without waiting for user input.
 #
 function function_select_menu() {
     local -n _options=$1
     local -n _fncalls=$2
     local title="$3"
     local description="$4"
+
+    # Add some additional options to the menu
+    _options[0]="Run All In Order"
+    _fncalls[0]="run_all"
+    _options[r]="Return"
+    _fncalls[r]="return"
+    #_options[x]="Exit"
+    #_fncalls[x]="exit"
 
     # run_all
     function run_all() {
@@ -870,6 +243,7 @@ function function_select_menu() {
 
     clear
     while true; do
+        # Display menu
         echo ""
         echo "****************************************"
         echo "  $title"
@@ -877,18 +251,19 @@ function function_select_menu() {
         echo ""
         echo "$description"
         echo ""
-        _options[0]="Run All In Order"
-        _fncalls[0]="run_all"
-        _options[r]="Return"
-        _fncalls[r]="return"
-        #_options[x]="Exit"
-        #_fncalls[x]="exit"
         keys=( $( echo ${!_options[@]} | tr ' ' $'\n' | sort ) )
         for opt in "${keys[@]}"; do
             echo "$opt) ${_options[$opt]}"
         done
         echo ""
 
+        # Skip user input if _AUTOCONFIRM
+        if [[ "$_AUTOCONFIRM" == true ]]; then
+            run_all
+            return 0;
+        done
+
+        # User option selection and function execution
         prompt="Enter an option: "
         unset REPLY
         command=""
@@ -902,6 +277,433 @@ function function_select_menu() {
     done
 
 }
+
+# get_script_dir {strname}
+#   Returns the full path containing the currently-running script.
+# Inputs:
+#   $0              - Script directory is recovered from the $0 command line argument.
+# Outputs:
+#   strname         - Name of string variable to store the parent directory of the currently-running script.
+#
+function get_script_dir() {
+    local -n __str=$1
+    __str="$(dirname "$(readlink -f "$0")")"
+}
+
+
+# get_user_home {strname} [user]
+#   Gets the home directory of the specified user.
+# Inputs:
+#   user        - Username. Defaults to $USER
+# Outputs:
+#   strname     - Name of string variable to store the home directory of the user, or "" (empty) if not found.
+#
+function get_user_home() {
+    local -n __str=$1
+    if [[ "$2" != "" ]]; then local username="$2"
+    else                      local username="$USER"
+    fi;
+    __str="$( getent passwd "$username" | cut -d: -f6 )"
+}
+
+
+# print_octal {str}
+#   Prints the octal representation of the string over top of its ASCII counterpart.
+# Example:
+#   print_octal "$IFS"
+# Inputs:
+#   str         - String to print.
+# Outputs:
+#   &1 (stdout) - Function prints to standard output channel.
+#
+function print_octal() {
+    printf '%s' "$1" | od -bc
+}
+
+
+# trim [strname]
+#   Removes leading and trailing whitespace from a string (including newlines)
+#   WARNING: REF variables do not work when pipes are connected to the function's stdin!
+#   Always use process substitution instead.
+#   Example:
+#       trim < <(printf "$str")
+# Inputs:
+#   strname     - Name of string variable to trim. CANNOT be named: _strref _out _in
+#   &0 (stdin)  - If strname is not specified, stdin is used instead.
+# Outputs:
+#   strname     - Returns trimmed string back into the nameref.
+#   &1 (stdout) - If strname is not specified, prints trimmed string to stdout.
+#
+function trim(){
+    if [[ "$1" == "" ]]; then local _strref="__unset"
+    else                      local -n _strref=$1
+                              local printf_args="-v _strref"
+    fi
+
+    local _in _out  # Set _in from stdin or the pass-by-reference
+    if [[ "$_strref" == "__unset" ]]; then
+        read -d '' -r _in
+    else
+        _in="$_strref"
+    fi
+
+    # _out is a function of _in
+    _in="${_in#"${_in%%[![:space:]]*}"}"
+    _in="${_in%"${_in##*[![:space:]]}"}"
+    _out="$_in"
+
+    # Print _out to either stdout or the pass-by-reference
+    builtin printf $printf_args "%s" "$_out"
+}
+
+
+# print_arr {arrayname}
+#   Prints the contents of an indexed or associative array to stdout.
+# Inputs:
+#   arrayname   - Name of array variable (unquoted).
+#                 CANNOT be named: __arr
+#   out_delim   - Optional: String to separate each array element in the resulting string. Defaults to \n.
+# Outputs:
+#   &1 (stdout) - Prints the array's contents to stdout.
+#
+function print_arr(){
+    if [[ "$1" == "" ]]; then return_error "No array variable specified"
+    else                      local -n __arr=$1
+    fi
+
+    local key
+    if [[ "${__arr@a}" == *A* ]]; then  # array is associative
+        local len maxlen=0
+        for key in ${!__arr[@]}; do       # get length of longest string (+2)
+            ((len="${#key}"+2))
+            if [ $len -gt $maxlen ]; then maxlen=$len; fi
+        done
+        for key in ${!__arr[@]}; do
+            printf "%${maxlen}s: \"%s\"\n" "[$key]" "${__arr[$key]}"
+        done
+    else                                # array is non-associative
+        for key in ${!__arr[@]}; do
+            printf '%4d: [%s]\n' "$key" "${__arr[$key]}"
+        done
+    fi
+}
+
+
+# has_value {arrayname} {value}
+#   Checks if value is a member of the array.
+# Inputs:
+#   arrayname   - Name of array variable. CANNOT be named __arr.
+#   value       - Value to test
+# Outputs:
+#   $?          - Exit code. 0 (success) indicates value was found inside the array.
+#   
+function has_value() {
+    local -n __arr=$1
+    local elem="$2" list_elem
+    for list_elem in "${__arr[@]}"; do
+        if [[ "$elem" == "$list_elem" ]]; then return 0; fi
+    done
+    return 1
+}
+
+
+# has_key {arrayname} {key}
+#   Checks if "key" is a key in the array.
+# Inputs:
+#   arrayname   - Name of array variable. CANNOT be named __arr.
+#   key         - key to test
+# Outputs:
+#   $?          - Exit code. 0 (success) indicates value was found inside the array.
+#   
+function has_key() {
+    local -n __arr=$1
+    local key="$2" arr_key
+    for arr_key in "${!__arr[@]}"; do
+        if [[ "$key" == "$arr_key" ]]; then return 0; fi
+    done
+    return 1
+}
+
+
+# are_arrays_equal {arrname1} {arrname2}
+#   Compares the contents of two arrays.
+# Inputs:
+#   arrname1   - Name of array variable (unquoted).
+#                 CANNOT be named: _arrref1
+#   arrname2   - Name of array variable (unquoted).
+#                 CANNOT be named: _arrref2
+# Outputs:
+#   $?         - Numeric exit code. 0 if every array element in ARR_1 is the same as ARR_2, 1 if otherwise.
+#
+function are_arrays_equal(){
+    if [[ "$1" == "" ]]; then return_error "No array variable specified"
+    else                      local -n _arrref1=$1
+                              if [[ "${_arrref1@a}" == *a* ]]; then local type1=a;    # nonassociative array
+                              elif [[ "${_arrref1@a}" == *A* ]]; then local type1=A;  # associative array
+                              else return_error "$1 is not an array"; fi
+    fi
+    if [[ "$2" == "" ]]; then return_error "No array variable specified"
+    else                      local -n _arrref2=$2
+                              if [[ "${_arrref2@a}" == *a* ]]; then local type2=a;    # nonassociative array
+                              elif [[ "${_arrref2@a}" == *A* ]]; then local type2=A;  # associative array
+                              else return_error "$2 is not an array"; fi
+    fi
+
+    # check if same type
+    if [[ $type1 != $type2 ]]; then echo here1; return 1; fi
+
+    # check if same size
+    if [[ "${#_arrref1[@]}" != "${#_arrref2[@]}" ]]; then echo here2; return 1; fi
+
+    # check elements match 1-1 
+    local key elem1 elem2
+    for key in ${!_arrref1[@]}; do
+        has_key _arrref2; if [ ! $? ]; then echo here3; return 1; fi    # Check if key exists in array 2
+        elem1="${_arrref1[$key]}"
+        elem2="${_arrref2[$key]}"
+        if [[ "$elem1" != "$elem2" ]]; then echo here4; return 1; fi    # Check if key maps to same element in both arrays
+    done
+    return 0
+}
+
+
+
+# str_to_arr {arrayname} [strname] [-e element_sep] [-p pair_sep]
+#   Splits a string into tokens and appends each one to an array.
+#   WARNING: REF variables do not work when pipes are connected to the function's stdin!
+#   Always use process substitution instead.
+#   Example:
+#       $str_to_arr arr ' ' < <(printf "$str")
+# Inputs:
+#   strname     - Name of string to read from.
+#                 CANNOT be named: __str
+#   element_sep - String which separates each array member.
+#                 Default: $'\n'.
+#   pair_sep    - String to separate each key and value. Ignored if output array is non-associative.
+#                 Default: "="
+#   &0 (stdin)  - If strname is not specified, reads stdin until EOF is reached.
+# Outputs:
+#   arrayname   - Name of array variable to store tokens into.
+#                 CANNOT be named: __arr
+#
+function str_to_arr(){
+    local -A args=( [e]=$'\n' [p]='=' )
+    fast_argparse args "arrname strname" "e p" "$@"
+    if [[ "${args[arrname]}" != "" ]]; then local -n __arr=${args[arrname]} # output array
+    else                                    return_error "No array variable specified"
+    fi
+    if [[ "${args[strname]}" != "" ]]; then local -n __str=${args[strname]} # read from pass-by-ref (fid 3)
+                                            local fid=3
+    else                                    local __str=""                  # read from stdin (fid 0)
+                                            local fid=0
+    fi
+    if [[ "${__arr@a}" == *A* ]]; then      local p="${args[p]}"            # array is associative
+    else                                    local p=""
+    fi
+    local e="${args[e]}"            
+    local tok key val
+
+    while IFS="$e" read -d "$e" -r tok <&${fid} || [ -n "$tok" ]; do
+        trim tok
+        #echo "tok: [$tok]"
+        if [[ "$tok" != "" ]] && [[ "$p" != "" ]]; then   # split token on 'p' for associative array
+
+            if [[ "$tok" =~ .+"$p" ]]; then                # but first check that token actually has a p
+                key="${tok%${p}*}"
+                val="${tok#*${p}}"
+                __arr["$key"]="$val"
+                #echo "found associative token: $tok   has key/val: $key/$val"
+            fi
+
+        elif [[ "$tok" != "" ]] && [[ "$p" == "" ]]; then # store token directly if non-associative array
+             __arr+=( "$tok" )
+        fi
+    done 3< <(printf '%s' "$__str")
+    exec 3<&-
+}
+
+
+# arr_to_str {arrayname} [strname] [-e element_sep] [-p pair_sep]
+#   Prints an array as a string. Prints members only, or as key/value pairs.
+# Inputs:
+#   arrayname   - Name of array variable to print.
+#                 CANNOT be named: __arr _args
+#   element_sep - String to separate each array member in the resulting string.
+#                 Default: '\n'.
+#   pair_sep    - String to separate each key and value. If empty, prints values only.
+#                 Default: ""
+# Outputs:
+#   strname     - Name of string in which to store result.
+#                 CANNOT be named: __str _args
+#   &1 (stdout) - If strname is not specified, prints the resulting string to stdout.
+#
+function arr_to_str() {
+    local -A args=( [e]=$'\n' )
+    fast_argparse args "arrname strname" "e p" "$@"
+    if [[ "${args[arrname]}" != "" ]]; then local -n __arr=${args[arrname]}
+    else                                    return_error "No array variable specified"
+    fi
+    if [[ "${args[strname]}" != "" ]]; then local -n __str=${args[strname]}
+                                            local printf_args="-v __str"
+    else                                    local __str=""
+                                            local printf_args=""
+    fi
+
+    local e="${args[e]}"
+    local p="${args[p]}"
+    local key
+
+    if [[ "$p" == "" ]]; then
+        for key in "${!__arr[@]}"; do
+            builtin printf $printf_args "%s%s$e" "$__str" "${__arr[$key]}"
+        done
+    else
+        for key in "${!__arr[@]}"; do
+            builtin printf $printf_args "%s%s$p%s$e" "$__str" "$key" "${__arr[$key]}"
+        done
+    fi
+}
+
+
+# foreach {function_call} [-in invarname] [-out outvarname] [-e 'elem_sep'] [-p 'pair_sep'] 
+#   Runs the specified function on every token of input.
+#   WARNING: nameref variables do not work when pipes are connected to the function's stdin!
+#   Always use process substitution instead.
+# Examples:
+#     foreach 'trim VAL' -out mystring < <(some_other -process)      # input from stdin, output to string
+#     foreach 'trim VAL' -in myassociativearray -out modifiedarray   # input from array, output to array
+#     foreach 'echo "$KEY:$VAL" -in string -e ' ' -p '='             # Neither KEY nor VAL are modified, but prints to stdout as a side effect
+# Inputs:
+#   function_call - String containing function call to run on each token of input.
+#                   The variables KEY and VAL are defined here.
+#                   If either KEY or VAL is modified, either directly or by pass-by-reference to another function,
+#                   the output will reflect the change.
+#   invarname     - Name of input variable. CANNOT be named: __in __out __arr __str __inarr __outarr
+#                       If string, the string is parsed by str_to_arr using -e and -p.
+#                       If array, the array elements are accessed directly (but not modified).
+#   &0 (stdin)    - If invarname not supplied, stdin is parsed by str_to_arr using -e and -p.
+#   element_sep   - String which separates each array member. Ignored by input or output if nameref points to an array.
+#                   Default: $'\n'.
+#   pair_sep      - String to separate each key and value. Ignored by input or output if nameref points to a nonassociative array
+#                   Default: "="
+# Outputs:
+#   outvarname    - Name of output variable containing modified KEY and VAL for each token.
+#                   CANNOT be named: __in __out __arr __str
+#                       If string, the string is built by arr_to_str using -e and -p.
+#                       If array, the array elements are modified directly.
+#   &1 (stdout)   - If outvarname not supplied, arr_to_str prints to stdout using -e and -p.
+#
+function foreach() {
+    local -A args=( [e]=$'\n' )
+    fast_argparse args "fncall" "in out e p" "$@"
+    if [[ "${args[in]}" != "" ]]; then      local -n __in=${args[in]} # input variable
+    fi
+    if [[ "${args[out]}" != "" ]]; then     local -n __out=${args[out]} # output variable
+    fi
+    local command="${args[fncall]}"
+    local e="${args[e]}"
+
+    # Create input array
+    if [[ "${args[in]}" == "" ]] && [[ "${args[p]}" != "" ]]; then   # __inarr should be parsed from stdin as associative array
+        #echo "here in 1"
+        local p="${args[p]}"
+        local -A __inarr=()
+        str_to_arr __inarr -e "$e" -p "$p"
+    elif [[ "${args[in]}" == "" ]] && [[ "${args[p]}" == "" ]]; then # __inarr should be parsed from stdin as non-associative array
+        #echo "here in 2"
+        local p='='
+        local -a __inarr=()
+        str_to_arr __inarr -e "$e"
+    elif [[ "${__in@a}" == *A* ]]; then     # __inarr a reference to (associative array) pass-by-ref input
+        #echo "here in 3"
+        [[ "${args[p]}" != "" ]] && local p="${args[p]}" || local p='='
+        local -n __inarr=__in
+    elif [[ "${__in@a}" == *a* ]]; then     # __inarr a reference to (nonassociative array) pass-by-ref input
+        #echo "here in 4"
+        [[ "${args[p]}" != "" ]] && local p="${args[p]}" || local p='='
+        local -n __inarr=__in
+    elif [[ "${args[p]}" != "" ]]; then     # __inarr should be parsed from string pass-by-ref as associative array
+        #echo "here in 5"
+        local p="${args[p]}"
+        local -A __inarr=()
+        str_to_arr __inarr __in -e "$e" -p "$p"
+    elif [[ "${args[p]}" == "" ]]; then     # __inarr should be parsed from string pass-by-ref as non-associative array
+        #echo "here in 6"
+        local p='='
+        local -a __inarr=()
+        str_to_arr __inarr __in -e "$e"
+    else
+        return_error "BUG: Invalid combination of inputs"
+    fi
+
+    # Create output array
+    if [[ "${args[out]}" == "" ]] && [[ "${__inarr@a}" == *A* ]]; then   # __outarr should be written to stdout as associative array
+        #echo "here out 1"
+        local -A __outarr=()
+        #arr_to_str __outarr -e "$e" -p "$p"
+    elif [[ "${args[out]}" == "" ]] && [[ "${__inarr@a}" == *a* ]]; then # __outarr should be written to stdout as non-associative array
+        #echo "here out 2"
+        local -a __outarr=()
+        #arr_to_str __outarr -e "$e"
+    elif [[ "${__out@a}" == *A* ]]; then     # __outarr a reference to (associative array) pass-by-ref output
+        #echo "here out 3"
+        local -n __outarr=__out
+    elif [[ "${__out@a}" == *a* ]]; then     # __outarr a reference to (nonassociative array) pass-by-ref output
+        #echo "here out 4"
+        local -n __outarr=__out
+    elif [[ "${__inarr@a}" == *A* ]]; then   # __outarr should be written to string pass-by-ref as associative array
+        #echo "here out 5"
+        local -A __outarr=()
+        #arr_to_str __outarr __out -e "$e" -p "$p"
+    elif [[ "${__inarr@a}" == *a* ]]; then   # __outarr should be written to string pass-by-ref as non-associative array
+        #echo "here out 6"
+        local -a __outarr=()
+        #arr_to_str __outarr __out -e "$e"
+    else
+        return_error "BUG: Invalid combination of inputs"
+    fi
+
+    #echo "INARR:"
+    #print_arr __inarr
+    #echo ""
+
+    # Operate on each element of input array
+    local KEY VAL
+    for KEY in ${!__inarr[@]}; do
+        VAL="${__inarr[$KEY]}"
+        #echo "KEY=$KEY,  VAL=$VAL,  FNCALL=$command"
+        eval $command
+        __outarr["$KEY"]="$VAL"
+    done
+
+    #echo "OUTARR:"
+    #print_arr __outarr
+    #echo ""
+
+    # Return modified array
+    if [[ "${args[out]}" == "" ]] && [[ "${__inarr@a}" == *A* ]]; then   # __outarr should be written to stdout as associative array
+        #local -A __outarr=()
+        arr_to_str __outarr -e "$e" -p "$p"
+    elif [[ "${args[out]}" == "" ]] && [[ "${__inarr@a}" == *a* ]]; then # __outarr should be written to stdout as non-associative array
+        #local -a __outarr=()
+        arr_to_str __outarr -e "$e"
+    elif [[ "${__out@a}" == *A* ]]; then     # __outarr a reference to (associative array) pass-by-ref output
+        #local -n __outarr=__out
+        :
+    elif [[ "${__out@a}" == *a* ]]; then     # __outarr a reference to (nonassociative array) pass-by-ref output
+        #local -n __outarr=__out
+        :
+    elif [[ "${__inarr@a}" == *A* ]]; then              # __outarr should be written to string pass-by-ref as associative array
+        #local -A __outarr=()
+        arr_to_str __outarr __out -e "$e" -p "$p"
+    elif [[ "${__inarr@a}" == *a* ]]; then              # __outarr should be written to string pass-by-ref as non-associative array
+        #local -a __outarr=()
+        arr_to_str __outarr __out -e "$e"
+    else
+        return_error "BUG: Invalid combination of inputs"
+    fi
+}
+
 
 
 #####################################################################################################
