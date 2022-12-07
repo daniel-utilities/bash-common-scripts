@@ -10,11 +10,17 @@
 #####################################################################################################
 #       REQUIRES COMMON-FUNCTIONS
 #
-if [ ! $__COMMON_FUNCS_AVAILABLE ]; then
+if [[ "$__COMMON_FUNCS_AVAILABLE" != "$TRUE" ]]; then
     echo "ERROR: This script requires \"common-functions.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
     return 1
 fi
+#
+#####################################################################################################
+#       GLOBAL VARIABLES:
+#
+unset __COMMON_IO_AVAILABLE  # Set to TRUE at the end of this file.
+#
 #####################################################################################################
 #       FUNCTION REFERENCE:
 #
@@ -98,15 +104,15 @@ function extract() {
     fi
 
     local EXT=${SRC##*.}
-    if [ "$EXT" = "gz" ]; then
+    if [[ "$EXT" = "gz" ]]; then
         tar -zxf "$SRC" -C "$DST_DIR" || sudo tar -zxf "$SRC" -C "$DST_DIR"
-    elif [ "$EXT" = "bz2" ]; then
+    elif [[ "$EXT" = "bz2" ]]; then
         tar -jxf "$SRC" -C "$DST_DIR" || sudo tar -jxf "$SRC" -C "$DST_DIR"
-    elif [ "$EXT" = "xz" ]; then
+    elif [[ "$EXT" = "xz" ]]; then
         tar -Jxf "$SRC" -C "$DST_DIR" || sudo tar -Jxf "$SRC" -C "$DST_DIR"
-    elif [ "$EXT" = "tar" ]; then
+    elif [[ "$EXT" = "tar" ]]; then
         tar -xf "$SRC" -C "$DST_DIR" || sudo tar -xf "$SRC" -C "$DST_DIR"
-    elif [ "$EXT" = "zip" ]; then
+    elif [[ "$EXT" = "zip" ]]; then
         unzip "$SRC" -d "$DST_DIR" || sudo unzip "$SRC" -d "$DST_DIR"
     else
       return_error "Unknown archive format ($EXT) for file: \"$SRC\""
@@ -130,7 +136,7 @@ function git_latest()
     local DIR="$(basename "$URL" .$EXT)"
     local DIR_OG="$PWD"
 
-    if [ -d "$DIR" ]; then
+    if [[ -d "$DIR" ]]; then
         cd "$DIR"
         git fetch --all
         git reset --hard origin/$BRANCH
@@ -270,4 +276,4 @@ function delete_lines_matching(){
 
 #####################################################################################################
 
-__COMMON_IO_AVAILABLE=0
+__COMMON_IO_AVAILABLE="$TRUE"

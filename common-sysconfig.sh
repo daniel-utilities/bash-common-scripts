@@ -11,16 +11,22 @@
 #####################################################################################################
 #       REQUIRES COMMON-FUNCTIONS, COMMON-IO
 #
-if [ ! $__COMMON_FUNCS_AVAILABLE ]; then
+if [[ "$__COMMON_FUNCS_AVAILABLE" != "$TRUE" ]]; then
     echo "ERROR: This script requires \"common-functions.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
     return 1
 fi
-if [ ! $__COMMON_IO_AVAILABLE ]; then
+if [[ "$__COMMON_IO_AVAILABLE" != "$TRUE" ]]; then
     echo "ERROR: This script requires \"common-io.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-io.sh\" before sourcing this script."
     return 1
 fi
+#
+#####################################################################################################
+#       GLOBAL VARIABLES:
+#
+unset __COMMON_SYSCONFIG_AVAILABLE  # Set to TRUE at the end of this file.
+#
 #####################################################################################################
 #       FUNCTION REFERENCE:
 #
@@ -61,7 +67,7 @@ fi
 #   $?          - Numeric exit value; 0 indicates systemd has been started.
 #
 function is_systemd() {
-    if [ -z "$__SYSTEMD" ]; then
+    if [[ -z "$__SYSTEMD" ]]; then
         systemctl list-units --type=service > /dev/null 2> /dev/null
         export __SYSTEMD=$?
     fi
@@ -118,7 +124,7 @@ function sysd_config_user_service() {
     fi
 
     SERVICE_FILE="$HOME/.config/systemd/user/$SERVICE.service"
-    [ ! -e "$SERVICE_FILE" ] && return_error "Required file $SERVICE_FILE does not exist."
+    [[ ! -e "$SERVICE_FILE" ]] && return_error "Required file $SERVICE_FILE does not exist."
 
     systemctl --user $MODE $SERVICE
     systemctl --user daemon-reload
@@ -231,4 +237,4 @@ function sysv_config_user_service() {
 
 #####################################################################################################
 
-__COMMON_SYSCONFIG_AVAILABLE=0
+__COMMON_SYSCONFIG_AVAILABLE="$TRUE"
