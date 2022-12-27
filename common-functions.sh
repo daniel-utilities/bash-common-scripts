@@ -666,16 +666,31 @@ function printvar() {
     print_var "$@"
 }
 function print_var() {
-    if [[ "$1" == "" ]]; then return_error "No variable specified in position 1."
-    else                      local -n __var=$1
-                              local varname=$1
-                              local vartype; get_type $1 vartype
+    local -A _fnargs=( [showname]="true"
+                       [prefix]="  "        )
+    fast_argparse _fnargs "varname" "showname prefix" "$@"
+
+    local varname="${_fnargs[varname]}"
+    local -n __var=$varname
+    local vartype; get_type $varname vartype
+    if [[ "${_fnargs[showname],,}" == "true"  ]]; then
+        local showname=$TRUE
+    else
+        local showname=$FALSE
+    fi
+    local prefix="${_fnargs[prefix]}"
+
+    # Print variable name
+    if [[ $showname == $TRUE ]]; then
+        printf "%s=" "$varname"
     fi
 
-    if [[ "$vartype" == s ]]; then    # is string
-        printf "%s=\"%s\"\n" "$varname" "$__var"
+    # Print string
+    if [[ "$vartype" == s ]]; then
+        printf "\"%s\"\n" "$__var"
 
-    elif [[ "$vartype" == A ]]; then  # is associative array
+    # Print array
+    elif [[ "$vartype" == a || "$vartype" == A ]]; then
         local key len maxlen=0
         local -a keys=("${!__var[@]}") sortedkeys=()
         sort_array keys sortedkeys
@@ -685,21 +700,14 @@ function print_var() {
             if [[ $len -gt $maxlen ]]; then maxlen=$len; fi
         done
 
-        printf "%s=\n" "$varname"
+        if [[ $showname == $TRUE ]]; then
+            printf "\n"
+        fi
         for key in "${sortedkeys[@]}"; do
-            printf "%${maxlen}s: \"%s\"\n" "[$key]" "${__var[$key]}"
+            printf "%s%${maxlen}s: \"%s\"\n" "$prefix" "[$key]" "${__var[$key]}"
         done
-
-    elif [[ "$vartype" == a ]]; then  # is associative array
-        local key
-        local -a keys=("${!__var[@]}") 
-
-        printf "%s=\n" "$varname"
-        for key in "${keys[@]}"; do
-            printf '%4d: [%s]\n' "$key" "${__var[$key]}"
-        done
-
     fi
+
 }
 
 

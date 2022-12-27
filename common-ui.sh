@@ -5,7 +5,6 @@
 #
 #       git clone https://github.com/daniel-utilities/bash-common-scripts.git
 #       source ./bash-common-scripts/common-functions.sh
-#       source ./bash-common-scripts/common-tables.sh
 #       source ./bash-common-scripts/common-ui.sh
 #
 #####################################################################################################
@@ -16,16 +15,12 @@ if [[ "$__COMMON_FUNCS_AVAILABLE" != "$TRUE" ]]; then
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
     return 1
 fi
-if [[ "$__COMMON_TABLES_AVAILABLE" != "$TRUE" ]]; then
-    echo "ERROR: This script requires \"common-tables.sh\" to be sourced in the current environment."
-    echo "Please run \"source path/to/common-tables.sh\" before sourcing this script."
-    return 1
-fi
 #
 #####################################################################################################
 #       GLOBAL VARIABLES:
 #
-unset __COMMON_UI_AVAILABLE  # Set to TRUE at the end of this file.
+# ___AUTOCONFIRM              # If == $TRUE, skips confirmation prompts (returns 0 automatically)
+unset __COMMON_UI_AVAILABLE  # Set to $TRUE at the end of this file.
 #
 #####################################################################################################
 #       FUNCTION REFERENCE:
@@ -56,18 +51,25 @@ unset __COMMON_UI_AVAILABLE  # Set to TRUE at the end of this file.
 
 
 
+
+###############################################################################
+# LEVEL 0 FUNCTIONS
+#   Functions take no namerefs as arguments, so name conflicts are not possible
+###############################################################################
+
+
 # confirmation_prompt [prompt]
 #   Prompts the user for a Y/N input.
 # Inputs:
 #   prompt          - Optional prompt text. Defaults to "Continue?"
 #   &0 (stdin)      - Reads user input from stdin
-#   $_AUTOCONFIRM   - If $_AUTOCONFIRM == "true", will immediately return 0 without prompt.
+#   $__AUTOCONFIRM   - If $__AUTOCONFIRM == $TRUE, will immediately return 0 without prompt.
 # Outputs:
 #   &1 (stdout)     - Writes prompt to stdout
 #   $?              - Numeric exit value; Returns 0 (success) if user has provided confirmation, 1 if not.
 #
 function confirmation_prompt() {
-    if [[ "$_AUTOCONFIRM" == "true" ]]; then return 0; fi
+    if [[ "$__AUTOCONFIRM" == $TRUE ]]; then return 0; fi
     if [[ "$1" == "" ]]; then local prompt="Continue? [Y/N]: "
     else                      local prompt="$1 [Y/N]: "
     fi
@@ -82,7 +84,7 @@ function confirmation_prompt() {
 # Inputs:
 #   prompt          - Optional prompt text. Defaults to "Continue?"
 #   &0 (stdin)      - Reads user input from stdin
-#   $_AUTOCONFIRM   - If $_AUTOCONFIRM == "true", will immediately return 0 without prompt.
+#   $__AUTOCONFIRM   - If $__AUTOCONFIRM == $TRUE, will immediately return 0 without prompt.
 # Outputs:
 #   &1 (stdout)     - Writes prompt to stdout
 #   $?              - Numeric exit value; Returns 0 (success) if user has provided confirmation, 1 if not.
@@ -97,84 +99,71 @@ function require_confirmation() {
 }
 
 
-# function_select_menu {optarrayname} {funcarrayname} {title} {description}
-#   Displays a selection menu to the user. Options map directly to function calls.
+
+###############################################################################
+# LEVEL 1 FUNCTIONS
+#   Functions take namerefs as arguments, but do not pass the namerefs to
+#   another function.
+#   All local variables are prefixed with '_', therefore passing a nameref of
+#   the format '_NAME' may cause errors.
+###############################################################################
+
+
+###############################################################################
+# LEVEL 2 FUNCTIONS
+#   Functions take namerefs as arguments and pass the nameref to a level 1 fcn.
+#   All local variables are prefixed with '__', therefore passing a nameref arg
+#   of the format '__NAME' may cause errors.
+###############################################################################
+
+
+# user_selection_menu {optionsarray} [-title "title"] [-subtitle "subtitle"] [-prefix "prefix"] [-prompt "prompt"]
+#   Displays a selection menu to the user and returns the user's selection.
 # Inputs:
-#   optarrayname  - Name of OPTIONS associative array. CANNOT be named: _options
+#   optionsarray  - Name of array containing menu options. Indexed or associative.
 #                   Keys are menu options and values are menu descriptions.
-#   funcarrayname - Name of FUNCTIONS associative array. CANNOT be named: _fncalls
-#                   Keys are menu options and values are function calls to be interpreted by 'eval'.
-#   $_AUTOCONFIRM - If $_AUTOCONFIRM == "true", will run all functions in order without waiting for user input.
+#   title         - Title to display at top of menu.
+#   subtitle      - Text to display below title.
+#   prefix        - Prefix text for each line of the menu. Defaults to "  ".
+#   prompt        - Prompt text.
+# Outputs:
+#   $REPLY        - Global variable set to the index/key of the user's choice.
 #
-function function_select_menu() {
-    local -n _options=$1
-    local -n _fncalls=$2
-    local title="$3"
-    local description="$4"
+function user_selection_menu() {
+    # Default values
+    local -A __fnargs=([title]=""
+                       [subtitle]="Options:"
+                       [prefix]="  "
+                       [prompt]="Enter an option: " )
+    fast_argparse __fnargs "optionsarray" "title subtitle prefix prompt" "$@"
 
-    # Add some additional options to the menu
-    _options[0]="Run All In Order"
-    _fncalls[0]="run_all"
-    _options[r]="Return"
-    _fncalls[r]="return"
-    #_options[x]="Exit"
-    #_fncalls[x]="exit"
+    local -n __opts="${__fnargs[optionsarray]}"
+    local title="${__fnargs[title]}"
+    local subtitle="${__fnargs[subtitle]}"
+    local prefix="${__fnargs[prefix]}"
+    local prompt="${__fnargs[prompt]}"
 
-    # run_all
-    function run_all() {
-        local _AUTOCONFIRM="true"
-        local command=""
-        keys=( $( echo ${!_fncalls[@]} | tr ' ' $'\n' | sort ) )
-        for opt in "${keys[@]}"; do
-            command="${_fncalls[$opt]}"
-
-            if [[ "$command" == "run_all"* || "$command" == "exit"* || "$command" == "return"* ]]; then
-                continue
-            fi
-
-            echo "Running command:"
-            echo "$command"
-            echo ""
-
-            eval "$command"
-        done
-    }
-
-    clear
-    while true; do
-        # Display menu
-        echo ""
-        echo "****************************************"
-        echo "  $title"
-        echo "****************************************"
-        echo ""
-        echo "$description"
-        echo ""
-        keys=( $( echo ${!_options[@]} | tr ' ' $'\n' | sort ) )
-        for opt in "${keys[@]}"; do
-            echo "$opt) ${_options[$opt]}"
-        done
-        echo ""
-
-        # Skip user input if _AUTOCONFIRM
-        if [[ "$_AUTOCONFIRM" == true ]]; then
-            run_all
-            return 0;
-        fi
-
-        # User option selection and function execution
-        prompt="Enter an option: "
-        unset REPLY
-        command=""
-        while [[ "$command" == "" ]]; do
-            read -r -p "$prompt"
-            if [[ "$REPLY" != "" ]]; then command="${_fncalls[$REPLY]}"
-            else                        command=""
-            fi
-            eval "$command"
-        done
+    # Display menu and prompt
+    printf "\n"
+    if [[ "${title}" != "" ]]; then
+        local divider=""
+        printf -v divider "%${#title}s" ""
+        printf -v divider "##%s##" "${divider// /#}"
+        printf "%s\n" "$divider"
+        printf "  %s\n" "$title"
+        printf "%s\n" "$divider"
+        printf "\n"
+    fi
+    if [[ "${subtitle}" != "" ]]; then
+        printf "%s\n" "$subtitle"
+        printf "\n"
+    fi
+    printvar __opts -showname false -prefix "$prefix"
+    printf "\n"
+    unset REPLY
+    while ! has_key __opts "$REPLY"; do
+        read -r -p "$prompt"
     done
-
 }
 
 
