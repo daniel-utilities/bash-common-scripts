@@ -697,9 +697,12 @@ function print_var() {
     elif [[ "$vartype" == a || "$vartype" == A ]]; then
         local key len maxlen=0
         local -a keys=("${!__var[@]}") sortedkeys=()
-        sort_array keys sortedkeys
+        if [[ "$vartype" == A ]]; then
+            sort_array keys sortedkeys
+            copy_array sortedkeys keys
+        fi
 
-        for key in "${sortedkeys[@]}"; do       # get length of longest string (+2)
+        for key in "${keys[@]}"; do       # get length of longest string (+2)
             ((len="${#key}"+2))
             if [[ $len -gt $maxlen ]]; then maxlen=$len; fi
         done
@@ -707,7 +710,9 @@ function print_var() {
         if [[ $showname == $TRUE ]]; then
             printf "\n"
         fi
-        for key in "${sortedkeys[@]}"; do
+
+        
+        for key in "${keys[@]}"; do
             printf "%s%${maxlen}s: %s\n" "$prefix" "[$key]" "${wrapper}${__var[$key]}${wrapper}"
         done
     fi
