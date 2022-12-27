@@ -281,7 +281,7 @@ function require_type_s() {
 #   $?          - Numeric exit value; 0 indicates this script is being run by root.
 #
 function is_root() {
-    [[ "$EUID" -eq 0 ]] && return 0 || return 1
+    [[ "$EUID" -eq 0 ]];
 }
 
 
@@ -294,7 +294,7 @@ function is_root() {
 #   $?          - Numeric exit value; 0 indicates this script is being run by root.
 #
 function require_root() {
-    is_root || return_error "Script can only be run by root. Retry with sudo."
+    is_root && return 0 || return_error "Script can only be run by root. Retry with sudo."
 }
 
 
@@ -307,7 +307,7 @@ function require_root() {
 #   $?          - Numeric exit value; 0 indicates this script is not root.
 #
 function require_non_root() {
-    is_root && return_error "Script can not be run by root. Retry without sudo."
+    is_root && return_error "Script can not be run by root. Retry without sudo." || return 0
 }
 
 
