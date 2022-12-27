@@ -29,8 +29,8 @@ unset __COMMON_UI_AVAILABLE  # Set to $TRUE at the end of this file.
 #   Prompts the user for a Y/N input.
 # require_confirmation [prompt]
 #   Prompts the user for a Y/N input, then returns from the function which called this if the user responds negatively.
-# function_select_menu {optarrayname} {funcarrayname} {title} {description}
-#   Displays a selection menu to the user. Options map directly to function calls.
+# user_selection_menu {optionsarray} [-title "title"] [-subtitle "subtitle"] [-prefix "prefix"] [-prompt "prompt"]
+#   Displays a selection menu to the user and returns the user's selection.
 #
 #####################################################################################################
 #       FORMAT:
