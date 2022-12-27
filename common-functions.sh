@@ -667,8 +667,9 @@ function printvar() {
 }
 function print_var() {
     local -A _fnargs=( [showname]="true"
-                       [prefix]="  "        )
-    fast_argparse _fnargs "varname" "showname prefix" "$@"
+                       [prefix]="  "        
+                       [wrapper]="\""     )
+    fast_argparse _fnargs "varname" "showname prefix wrapper" "$@"
 
     local varname="${_fnargs[varname]}"
     local -n __var=$varname
@@ -679,6 +680,7 @@ function print_var() {
         local showname=$FALSE
     fi
     local prefix="${_fnargs[prefix]}"
+    local wrapper="${_fnargs[wrapper]}"
 
     # Print variable name
     if [[ $showname == $TRUE ]]; then
@@ -687,7 +689,7 @@ function print_var() {
 
     # Print string
     if [[ "$vartype" == s ]]; then
-        printf "\"%s\"\n" "$__var"
+        printf "%s\n" "" "${wrapper}${__var}${wrapper}"
 
     # Print array
     elif [[ "$vartype" == a || "$vartype" == A ]]; then
@@ -704,7 +706,7 @@ function print_var() {
             printf "\n"
         fi
         for key in "${sortedkeys[@]}"; do
-            printf "%s%${maxlen}s: \"%s\"\n" "$prefix" "[$key]" "${__var[$key]}"
+            printf "%s%${maxlen}s: %s\n" "$prefix" "[$key]" "${wrapper}${__var[$key]}${wrapper}"
         done
     fi
 
