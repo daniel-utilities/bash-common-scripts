@@ -19,12 +19,15 @@ fi
 #####################################################################################################
 #       GLOBAL VARIABLES:
 #
-# ___AUTOCONFIRM              # If == $TRUE, skips confirmation prompts (returns 0 automatically)
-unset __COMMON_UI_AVAILABLE  # Set to $TRUE at the end of this file.
+# __AUTOCONFIRM               # If == $TRUE, skips confirmation prompts (returns 0 automatically)
+# REPLY                       # Set by any function which reads user input.
+unset __COMMON_UI_AVAILABLE   # Set to $TRUE at the end of this file.
 #
 #####################################################################################################
 #       FUNCTION REFERENCE:
 #
+# pause [prompt]
+#   Waits until the user presses ENTER key.
 # confirmation_prompt [prompt]
 #   Prompts the user for a Y/N input.
 # require_confirmation [prompt]
@@ -58,6 +61,27 @@ unset __COMMON_UI_AVAILABLE  # Set to $TRUE at the end of this file.
 ###############################################################################
 
 
+# pause [prompt]
+#   Waits until the user presses ENTER key.
+# Inputs:
+#   prompt          - Optional prompt text.
+#   &0 (stdin)      - Reads user input from stdin
+#   $__AUTOCONFIRM   - If $__AUTOCONFIRM == $TRUE, will immediately return 0 without prompt.
+# Outputs:
+#   &1 (stdout)     - Writes prompt to stdout
+#   $REPLY          - Global variable is set automatically. Contains user input.
+#
+function pause() {
+    if [[ "$__AUTOCONFIRM" == $TRUE ]]; then return 0; fi
+    if [[ "$1" == "" ]]; then local prompt="Press ENTER to continue... "
+    else                      local prompt="$1 "
+    fi
+    unset REPLY
+    read -r -p "$prompt" 
+    return 0
+}
+
+
 # confirmation_prompt [prompt]
 #   Prompts the user for a Y/N input.
 # Inputs:
@@ -67,6 +91,7 @@ unset __COMMON_UI_AVAILABLE  # Set to $TRUE at the end of this file.
 # Outputs:
 #   &1 (stdout)     - Writes prompt to stdout
 #   $?              - Numeric exit value; Returns 0 (success) if user has provided confirmation, 1 if not.
+#   $REPLY          - Global variable is set automatically. Contains user input.
 #
 function confirmation_prompt() {
     if [[ "$__AUTOCONFIRM" == $TRUE ]]; then return 0; fi
@@ -88,6 +113,7 @@ function confirmation_prompt() {
 # Outputs:
 #   &1 (stdout)     - Writes prompt to stdout
 #   $?              - Numeric exit value; Returns 0 (success) if user has provided confirmation, 1 if not.
+#   $REPLY          - Global variable is set automatically. Contains user input.
 #
 function require_confirmation() {
     confirmation_prompt "$1"
