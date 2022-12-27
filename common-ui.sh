@@ -158,7 +158,7 @@ function user_selection_menu() {
         printf "%s\n" "$subtitle"
         printf "\n"
     fi
-    printvar __opts -showname false -prefix "$prefix"
+    printvar __opts -showname false -prefix "$prefix" -wrapper ""
     printf "\n"
     unset REPLY
     while ! has_key __opts "$REPLY"; do

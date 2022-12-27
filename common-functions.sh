@@ -68,8 +68,8 @@ unset __COMMON_FUNCS_AVAILABLE  # Set to TRUE at the end of this file.
 #   Returns the file extension of the specified file, or nothing if the filename has no extension.
 # print_octal {str}
 #   Prints the octal representation of the string over top of its ASCII counterpart.
-# printvar {variablename}
-# print_var {variablename}
+# printvar {variablename} [-showname true|false] [-prefix "..."] [-wrapper "..."]
+# print_var {variablename} [-showname true|false] [-prefix "..."] [-wrapper "..."]
 #   Prints the contents of a string or array to stdout.
 # str_to_arr {arrayname} [strname] [-e element_sep] [-p pair_sep]
 #   Splits a string into tokens and appends each one to an array.
@@ -653,12 +653,14 @@ function print_octal() {
 }
 
 
-# printvar {variablename}
-# print_var {variablename}
+# printvar {variablename} [-showname true|false] [-prefix "..."] [-wrapper "..."]
+# print_var {variablename} [-showname true|false] [-prefix "..."] [-wrapper "..."]
 #   Prints the contents of a string or array to stdout.
 # Inputs:
-#   variablename  - Name of array variable (unquoted).
-#                   CANNOT be named: __var
+#   variablename  - Name of variable to print.
+#   showname      - If true, prints the name of the variable. Default: true
+#   prefix        - For array variables, prefix each line with this string. Default: "  "
+#   wrapper       - Character(s) to display before and after the value. Default: "\""
 # Outputs:
 #   &1 (stdout)   - Prints the array's contents to stdout.
 #
