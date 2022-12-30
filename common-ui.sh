@@ -19,9 +19,9 @@ fi
 #####################################################################################################
 #       GLOBAL VARIABLES:
 #
-# __AUTOCONFIRM               # If == $TRUE, skips confirmation prompts (returns 0 automatically)
-# REPLY                       # Set by any function which reads user input.
 unset __COMMON_UI_AVAILABLE   # Set to $TRUE at the end of this file.
+# REPLY                       # Set by any function which reads user input.
+# __AUTOCONFIRM               # If == $TRUE, skips confirmation prompts (returns 0 automatically)
 #
 #####################################################################################################
 #       FUNCTION REFERENCE:
@@ -32,6 +32,20 @@ unset __COMMON_UI_AVAILABLE   # Set to $TRUE at the end of this file.
 #   Prompts the user for a Y/N input.
 # require_confirmation [prompt]
 #   Prompts the user for a Y/N input, then returns from the function which called this if the user responds negatively.
+# get_term_width [varname]
+#   Returns the number of columns in the current terminal window
+# get_repeated_string {varname} {"string"} {numcopies}
+#   Returns a string which is n copies of the string
+# get_center_justified_string {varname} {"string"} [len]
+#   Returns a string in which "string" appears centered in the block of length 'len'.
+# get_right_justified_string {varname} {"string"} [len]
+#   Returns a string in which "string" appears right-justified in the block of length 'len'.
+# wrap_string {varname} {"string"} [len]
+#   Splits "string" into lines of length 'len', keeping words whole.
+# crop_string {varname} {"string"} [len ["indicator"]]
+#   If "string" is longer than 'len', it is cropped to (len-length(indicator)) and the indicator text is appended to the end.
+# get_title_box {varname} {"title"} [-width numchars] [-top '-'] [-side '|'] [-corner '+']
+#   Returns a multiline block with borders on all sides and "title" center-justified within.
 # user_selection_menu {optionsarray} [-title "title"] [-subtitle "subtitle"] [-prefix "prefix"] [-prompt "prompt"]
 #   Displays a selection menu to the user and returns the user's selection.
 #
@@ -125,7 +139,6 @@ function require_confirmation() {
 }
 
 
-
 ###############################################################################
 # LEVEL 1 FUNCTIONS
 #   Functions take namerefs as arguments, but do not pass the namerefs to
@@ -133,6 +146,191 @@ function require_confirmation() {
 #   All local variables are prefixed with '_', therefore passing a nameref of
 #   the format '_NAME' may cause errors.
 ###############################################################################
+
+# get_term_width {varname}
+#   Returns the number of columns in the current terminal window
+# Outputs:
+#   varname         - Return number of columns into this variable
+#
+function get_term_width() {
+    local -n _ret=$1
+    _ret="$(tput cols)"
+}
+
+
+# get_repeated_string {varname} {"string"} {numcopies}
+#   Returns a string which is n copies of the string
+# Inputs:
+#   string          - String to repeat.
+#   numcopies       - Repeat the string this many times
+# Outputs:
+#   varname         - Returns repeated string into this variable
+#
+function get_repeated_string() {
+    local -n _ret=$1
+    local _str="$2"
+    if [[ "$_str" == "" ]]; then _str=" "; fi
+    local _num="$3"
+
+    printf -v _ret "%${_num}s" ""
+    printf -v _ret "%s" "${_ret// /$_str}"
+}
+
+
+# get_center_justified_string {varname} {"string"} [len]
+#   Returns a string in which "string" appears centered in the block of length 'len'.
+# Inputs:
+#   string          - String to center-justify
+#   len             - (Optional) Number of characters in the resulting string.
+#                     If not provided, uses get_term_width to create a string which
+#                     spans the current terminal window (slow).
+# Outputs:
+#   varname         - Return centered string into this variable
+#
+function get_center_justified_string() {
+    local -n _ret=$1
+    local _str="$2"
+    local _len="$3"
+    if [[ "$_len" == "" ]]; then get_term_width _len; fi
+
+    local _left_pad_len=0; (( _left_pad_len=(${#_str}+_len)/2 ))
+    local _right_pad_len=0; (( _right_pad_len=_len-_left_pad_len ))
+    printf -v _ret "%${_left_pad_len}s%${_right_pad_len}s" "$_str" ""
+}
+
+
+# get_right_justified_string {varname} {"string"} [len]
+#   Returns a string in which "string" appears right-justified in the block of length 'len'.
+# Inputs:
+#   string          - String to right-justify
+#   len             - (Optional) Number of characters in the resulting string.
+#                     If not provided, uses get_term_width to create a string which
+#                     spans the current terminal window (slow).
+# Outputs:
+#   varname         - Return right-aligned string into this variable
+#
+function get_right_justified_string() {
+    local -n _ret=$1
+    local _str="$2"
+    local _len="$3"
+    if [[ "$_len" == "" ]]; then get_term_width _len; fi
+
+    printf -v _ret "%${_len}s" "$_str"
+}
+
+
+# get_left_justified_string {varname} {"string"} [len]
+#   Returns a string in which "string" appears left-justified in the block of length 'len'.
+#   Useful for padding a string to a fixed length.
+# Inputs:
+#   string          - String to left-justify
+#   len             - (Optional) Number of characters in the resulting string.
+#                     If not provided, uses get_term_width to create a string which
+#                     spans the current terminal window (slow).
+# Outputs:
+#   varname         - Return left-aligned string into this variable
+#
+function get_left_justified_string() {
+    local -n _ret=$1
+    local _str="$2"
+    local _len="$3"
+    if [[ "$_len" == "" ]]; then get_term_width _len; fi
+
+    local _right_pad_len=0; (( _right_pad_len=_len-${#_str} ))
+    printf -v _ret "%s%${_right_pad_len}s" "$_str" ""
+}
+
+
+# wrap_string {varname} {"string"} [len]
+#   Splits "string" into lines of length 'len', keeping words whole.
+#   Resulting multiline string is stored in varname.
+# Inputs:
+#   string          - String to word-wrap.
+#   len             - (Optional) Number of characters in the resulting string.
+#                     If not provided, uses get_term_width to create a string which
+#                     spans the current terminal window (slow).
+# Outputs:
+#   varname         - Return word-wrapped lines into this variable.
+#
+function wrap_string() {
+    local -n _ret=$1
+    local _str="$2"
+    local _len="$3"
+    if [[ "$_len" == "" ]]; then get_term_width _len; fi
+
+    _ret="$(fold -sw $_len <<< "$_str")"
+}
+
+
+# crop_string {varname} {"string"} [len ["indicator"]]
+#   If "string" is longer than 'len', it is cropped to (len-length(indicator)) and the indicator is appended.
+# Inputs:
+#   string          - String to word-wrap.
+#   len             - (Optional) Number of characters in the resulting string.
+#                     If not provided, uses get_term_width to create a string which
+#                     spans the current terminal window (slow).
+#   indicator       - (Optional) Text to append to the end of the cropped string.
+#                     Defaults to "..."
+# Outputs:
+#   varname         - Return cropped string into this variable.
+#
+function crop_string() {
+    local -n _ret=$1
+    local _str="$2"
+    local _len="$3"
+    if [[ "$_len" == "" ]]; then get_term_width _len; fi
+    local _ind="$4"
+    if [[ "$_ind" == "" ]]; then _ind="..."; fi
+
+    if [[ "${#_str}" -gt "$_len" ]]; then 
+        (( _len = _len - ${#_ind} ))
+        printf -v _ret "%s%s" "${_str:0:$_len}" "$_ind"
+    else
+        _ret="$_str"
+    fi
+}
+
+
+# get_title_box {varname} {"title"} [-width numchars] [-top '-'] [-side '|'] [-corner '+']
+#   Returns a multiline block with borders on all sides and "title" center-justified within.
+# Inputs:
+#   title           - Text to display in the center of the title box.
+#                     May be multiple lines.
+#   width           - (Optional) Width of the title box in characters.
+#                     If not provided, uses get_term_width to create a string which
+#                     spans the current terminal window (slow).
+#   top side corner - Characters to use for the top/bottom, sides, and corners of the box.
+# Outputs:
+#   varname         - Return title box into this variable.
+#
+function get_title_box() {
+    local -A _fnargs=( [top]='-' [side]='|' [corner]='+' )
+    fast_argparse _fnargs "varname title" "width top side corner" "$@"
+    local -n _ret="${_fnargs[varname]}"
+    local _title="${_fnargs[title]} "
+    local _width="${_fnargs[width]}"
+    if [[ "$_width" == "" ]]; then get_term_width _width; fi
+    local _t="${_fnargs[top]}"
+    local _s="${_fnargs[side]}"
+    local _c="${_fnargs[corner]}"
+
+    local _topline=""
+    local _ctrlen=0; (( _ctrlen = _width - ${#_c} - ${#_c} ))
+    get_repeated_string _topline "$_t" "$_ctrlen"
+    printf -v _topline "%s%s%s\n" "$_c" "${_topline:0:_ctrlen}" "$_c"
+
+    local _midlines=""
+    local _ctrlen=0; (( _ctrlen = _width - ${#_s} - ${#_s} ))
+    local _line;
+    while IFS= read -r _line || [[ -n "$_line" ]]; do
+        trim _line
+        get_center_justified_string _line "$_line" "$_ctrlen"
+        printf -v _line "%s%s%s\n" "$_s" "$_line" "$_s"
+        _midlines="${_midlines}${_line}"
+    done < <(printf '%s' "$_title")
+
+    printf -v _ret "%s%s%s" "$_topline" "$_midlines" "$_topline"
+}
 
 
 ###############################################################################
@@ -143,13 +341,14 @@ function require_confirmation() {
 ###############################################################################
 
 
+
 # user_selection_menu {optionsarray} [-title "title"] [-subtitle "subtitle"] [-prefix "prefix"] [-prompt "prompt"]
 #   Displays a selection menu to the user and returns the user's selection.
 # Inputs:
 #   optionsarray  - Name of array containing menu options. Indexed or associative.
 #                   Keys are menu options and values are menu descriptions.
 #   title         - Title to display at top of menu.
-#   subtitle      - Text to display below title.
+#   description   - Text to display below title.
 #   prefix        - Prefix text for each line of the menu. Defaults to "  ".
 #   prompt        - Prompt text.
 # Outputs:
@@ -158,32 +357,42 @@ function require_confirmation() {
 function user_selection_menu() {
     # Default values
     local -A __fnargs=([title]=""
-                       [subtitle]="Options:"
+                       [description]="Options:"
                        [prefix]="  "
                        [prompt]="Enter an option: " )
-    fast_argparse __fnargs "optionsarray" "title subtitle prefix prompt" "$@"
+    fast_argparse __fnargs "optionsarray" "title description prefix prompt" "$@"
 
     local -n __opts="${__fnargs[optionsarray]}"
     local title="${__fnargs[title]}"
-    local subtitle="${__fnargs[subtitle]}"
+    local description="${__fnargs[description]}"
     local prefix="${__fnargs[prefix]}"
     local prompt="${__fnargs[prompt]}"
+    local width=0; get_term_width width
 
     # Display menu and prompt
     printf "\n"
-    if [[ "${title}" != "" ]]; then
-        local divider=""
-        printf -v divider "%${#title}s" ""
-        printf -v divider "##%s##" "${divider// /#}"
-        printf "%s\n" "$divider"
-        printf "  %s\n" "$title"
-        printf "%s\n" "$divider"
-        printf "\n"
+    if [[ "$title" != "" ]]; then
+        local titlebox=""
+        get_title_box titlebox "$title" -width "$width" -top '#' -side '#' -corner '#'
+        printf "%s" "$titlebox"
     fi
-    if [[ "${subtitle}" != "" ]]; then
-        printf "%s\n" "$subtitle"
-        printf "\n"
+    if [[ "$description" != "" ]]; then
+        wrap_string description "$description" "$width"
+        printf "%s\n" "$description"
     fi
+#   if [[ "${title}" != "" ]]; then
+#       local divider=""
+#       printf -v divider "%${#title}s" ""
+#       printf -v divider "##%s##" "${divider// /#}"
+#       printf "%s\n" "$divider"
+#       printf "  %s\n" "$title"
+#       printf "%s\n" "$divider"
+#       printf "\n"
+#   fi
+#   if [[ "${subtitle}" != "" ]]; then
+#       printf "%s\n" "$subtitle"
+#       printf "\n"
+#   fi
     printvar __opts -showname false -prefix "$prefix" -wrapper ""
     printf "\n"
     unset REPLY
