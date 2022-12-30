@@ -591,8 +591,8 @@ function table_set_col() {
 
 function table_set_row() {
     local -n __table=$1;    require_table $1
-    local __colname="$2";   [[ "$2" == "" ]] && return 1
-    local __rowname
+    local __rowname="$2";   [[ "$2" == "" ]] && return 1
+    local __colname
     local -n __vals=$3;     local __vartype; get_type __vals __vartype
 
     local IFS=$'\t' __name
