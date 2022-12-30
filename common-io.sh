@@ -30,6 +30,8 @@ unset __COMMON_IO_AVAILABLE  # Set to TRUE at the end of this file.
 #   Extracts an archive file to a destination directory. Supports tar, gz, bz2, xz, zip.
 # git_latest {URL} {BRANCH}
 #   Clones or pulls a git repository in the current directory (with recursive submodules).
+# find_key_value_pair {varname} {"file"} {"key"} ["sep"]
+#  Searches a file for a line containing the specified key, then returns the associated value.
 # ensure_line {file} {str} [match=whole/partial [sudo=true/false]]
 #   Appends a line to the file, if line does not exist. Choose whole or partial line match.
 # ensure_line_visudo {file} {str} [match=whole/partial]
@@ -146,6 +148,40 @@ function git_latest()
     else
         git clone --single-branch "$BRANCH" --recurse-submodules "$URL"
     fi
+}
+
+
+# find_key_value_pair {varname} {"file"} {"key"} ["sep"]
+#  Searches a file for a line containing the specified key, then returns the associated value.
+# Inputs:
+#   file        - Path to a file.
+#   key         - Key to search for. Key/value pair must be in the format:
+#                   key sep "value"
+#                   key sep 'value'
+#   sep         - Pair separator. Defaults to '='.
+# Outputs:
+#   varname     - Name of variable to store the value.
+#   $?          - Numeric exit code. 0 (success) if the pair was found, 1 (failure) otherwise.
+#
+function find_key_value_pair() {
+    local -n _ret=$1
+    local _file="$2"
+    local _key="$3"
+    local _sep="$4"
+    if [[ "$_sep" == "" ]]; then _sep="="; fi
+
+    #local _pat="^\\s*${_key}\\s*${_sep}\\s*[\"']?(.*?)[\"']?\\s*\$"
+    local _pat="^\\s*${_key}\\s*${_sep}\\s*[\"'](.*?)[\"']\\s*\$"
+    local _line
+    echo "PATTERN: $_pat"
+    while IFS= read -r _line || [[ -n "$_line" ]] ; do
+        if [[ "$_line" =~ $_pat ]]; then 
+            _ret="${BASH_REMATCH[1]}"
+            return 0
+        fi
+    done < "$_file"
+    _ret=""
+    return 1
 }
 
 
