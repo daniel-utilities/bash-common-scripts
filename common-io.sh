@@ -170,10 +170,8 @@ function find_key_value_pair() {
     local _sep="$4"
     if [[ "$_sep" == "" ]]; then _sep="="; fi
 
-    #local _pat="^\\s*${_key}\\s*${_sep}\\s*[\"']?(.*?)[\"']?\\s*\$"
     local _pat="^\\s*${_key}\\s*${_sep}\\s*[\"'](.*?)[\"']\\s*\$"
     local _line
-    echo "PATTERN: $_pat"
     while IFS= read -r _line || [[ -n "$_line" ]] ; do
         if [[ "$_line" =~ $_pat ]]; then 
             _ret="${BASH_REMATCH[1]}"
