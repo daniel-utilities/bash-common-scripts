@@ -30,6 +30,8 @@ unset __COMMON_IO_AVAILABLE  # Set to TRUE at the end of this file.
 #   Extracts an archive file to a destination directory. Supports tar, gz, bz2, xz, zip.
 # git_latest {URL} {BRANCH}
 #   Clones or pulls a git repository in the current directory (with recursive submodules).
+# has_line {"file"} {"regexp"} [varname]
+#  Searches a file for a line which matches the regular expression.
 # find_key_value_pair {varname} {"file"} {"key"} ["sep"]
 #  Searches a file for a line containing the specified key, then returns the associated value.
 # ensure_line {file} {str} [match=whole/partial [sudo=true/false]]
@@ -148,6 +150,36 @@ function git_latest()
     else
         git clone --single-branch "$BRANCH" --recurse-submodules "$URL"
     fi
+}
+
+
+# has_line {"file"} {"regexp"} [varname]
+#  Searches a file for a line which matches the regular expression.
+# Inputs:
+#   file                - Path to a file.
+#   regexp              - Regular expression to match.
+# Outputs:
+#   $?                  - Numeric exit code. 0 (success) if a matching line was found, 1 (failure) otherwise.
+#   varname             - If supplied, stores the whole line into this variable.
+#   ${BATCH_REMATCH[N]} - Automatic assignment by regex parser. If any capturing groups are specified in the regex,
+#                         the captured strings are stored in this array (1-indexed).
+#
+function has_line() {
+    local _file="$1"
+    local _pat="$2"
+    if [[ "$3" != "" ]]; then local -n _ret=$3
+    else                      local _ret=""
+    fi
+
+    local _line
+    while IFS= read -r _line || [[ -n "$_line" ]] ; do
+        if [[ "$_line" =~ $_pat ]]; then 
+            _ret="${BASH_REMATCH[0]}"
+            return 0
+        fi
+    done < "$_file"
+    _ret=""
+    return 1
 }
 
 
