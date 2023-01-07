@@ -2,7 +2,7 @@
 
 source common-functions.sh
 source common-io.sh
-source common-sysconfig.sh
+source common-installer.sh
 source common-tables.sh
 source common-ui.sh
 source common-wsl.sh
@@ -794,7 +794,7 @@ if ! equal_arrays output correct; then failure_report "$fnname" input output cor
 
 #####################################################################################################
 #
-#       BASH COMMON-SYSCONFIG FUNCTIONS
+#       BASH COMMON-INSTALLER FUNCTIONS
 #
 #####################################################################################################
 

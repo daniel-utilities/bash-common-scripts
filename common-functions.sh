@@ -66,6 +66,12 @@ unset __COMMON_FUNCS_AVAILABLE  # Set to TRUE at the end of this file.
 #   Returns the parent path to the file or folder. Similar to 'dirname' command.
 # get_fileext {varname} {path}
 #   Returns the file extension of the specified file, or nothing if the filename has no extension.
+# split_path {arrayname} {"path"} [sep]
+#   Splits the path string into an array. Corrects improperly-formatted path strings.
+# join_path {stringname} {arrayname} [sep]
+#   Joins the elements of arrayname into a properly-formatted path string.
+# clean_path {stringname} {"path""" ['sep']
+#   Sanitizes the path. Ensures that path is a valid path string.
 # print_octal {str}
 #   Prints the octal representation of the string over top of its ASCII counterpart.
 # printvar {variablename} [-showname true|false] [-prefix "..."] [-wrapper "..."]
@@ -595,25 +601,67 @@ function get_basename() {
 }
 
 
-# get_dirname {varname} {path}
-#   Returns the parent path to the file or folder. Similar to 'dirname' command.
+# get_dirname {varname} {path} [sep]
+#   Returns the parent path of the file or folder. Similar to 'dirname' command.
 # Example:
 #   get_dirname dir "/path/to/a/file.txt"   # variable 'dir' now contains "/path/to/a"
+#   get_dirname dir "file.txt"              # variable 'dir' now contains "."
 # Inputs:
 #   path        - Path to a file or directory.
+#   sep         - Separator character on which to split the path. Defaults to '/'.
 # Outputs:
-#   varname     - Returns the directory name into this variable.
+#   varname     - Returns the parent directory path into this variable.
 #
 function get_dirname() {
     local -n __outstr=$1
     local __instr="$2"
-    __instr="${__instr#"${__instr%%[![:space:]]*}"}" # trim leading and trailing whitespace
-    __instr="${__instr%"${__instr##*[![:space:]]}"}"
-    __instr="${__instr%"${__instr##*[!/]}"}"         # trim trailing slash(s)
-    __instr="${__instr%/*}"                          # trim basename
-    __instr="${__instr%"${__instr##*[!/]}"}"         # trim trailing slash(s) (again, for some weird edge cases)
+    local __sep="${3:-/}"
+    
+    local -a __inarr
+    split_path __inarr "$__instr" "$__sep"
 
-    __outstr="$__instr"
+    if [[ "${#__inarr[@]}" -gt 1 ]]; then
+        unset '__inarr[-1]'
+    elif [[ "${__inarr[0]}" != "" ]]; then
+        unset '__inarr[0]'
+    fi
+
+    join_path __outstr __inarr "$__sep"
+}
+
+
+# get_realpath {varname} {path}
+#   Returns the absolute path to the file or folder. Similar to 'realpath' command.
+# Inputs:
+#   path        - Path to a file or directory.
+# Outputs:
+#   varname     - Returns the absolute path into this variable.
+#
+function get_realpath() {
+    local -n __realpath=$1; __realpath=""
+    local __inpath="$2"
+
+    local error=0
+    local __originaldir="$PWD"
+    local __parentdir
+    get_dirname __parentdir "$__inpath"
+
+    if [[ "$__inpath" == "" ]]; then
+        __realpath="$PWD"
+    elif [[ -d "$__inpath" ]]; then
+        cd "$__inpath"
+        __realpath="$PWD"
+    elif [[ -d "${__parentdir}" ]]; then
+        local __basename;
+        get_basename __basename "$__inpath"
+        cd "$__parentdir"
+        __realpath="${PWD}/${__basename}"
+    else
+        error=1
+    fi
+
+    cd "$__originaldir"
+    return $error
 }
 
 
@@ -636,6 +684,113 @@ function get_fileext() {
     __instr="${__instr#"${__instr%.*}"}"             # trim everything before the last '.', or everything if no '.'
 
     __outstr="$__instr"
+}
+
+
+# split_path {arrayname} {"path"} [sep]
+#   Splits the path string into an array. Corrects improperly-formatted path strings.
+#   Absolute paths (which start with the root directory / ) are represented by an empty first element (idx 0).
+# Inputs:
+#   path        - Path to a file or directory.
+#   sep         - Separator character on which to split the path. Defaults to '/'.
+# Outputs:
+#   arrayname   - Returns the split path into this array.
+#
+function split_path() {
+    local -n ___outarr=$1; ___outarr=()
+    local ___instr="$2"
+    local ___sep="${3:-/}"
+    
+    # Handle string == "" (empty relative path)
+    if [[ "$___instr" == "" ]]; then
+        ___outarr=()
+        return
+    fi
+
+    # Handle string is nonempty
+    local ___dir ___idx
+    local -a ___temparr
+    readarray -td "$___sep" ___temparr <<< "${___instr}${___sep}"; unset '___temparr[-1]'
+
+    for ___idx in "${!___temparr[@]}"; do
+        ___dir="${___temparr[$___idx]}"
+        ___dir="${___dir#"${___dir%%[![:space:]]*}"}" # trim leading and trailing whitespace
+        ___dir="${___dir%"${___dir##*[![:space:]]}"}"
+
+        if [[ "$___dir" == "" && "$___idx" -ne 0 ]]; then continue; fi    # skip empty elements except if its the first element
+        ___outarr+=( "$___dir" )
+    done
+}
+
+
+# join_path {stringname} {arrayname} [sep]
+#   Joins the elements of arrayname into a properly-formatted path string.
+# Inputs:
+#   arrayname   - Name of array containing path elements to join.
+#                 Absolute paths (which start with the root directory / ) should be represented by an empty first element (idx 0).
+#                 All other empty elements are ignored.
+#   sep         - Separator character with which to join the path. Defaults to '/'.
+# Outputs:
+#   stringname  - Name of string to store the path into.
+#                 If arrayname is an empty array, returns the string "."
+#
+function join_path() {
+    local -n ___outstr=$1; ___outstr=""
+    local -n ___inarr=$2
+    local ___sep="${3:-/}"
+
+    # Handle array == ()     (empty relative path)
+    if [[ "${#___inarr[@]}" -eq 0 ]]; then  
+        ___outstr="."
+        return
+    fi
+
+    # Handle array == ( "" ) (empty absolute path)
+    if [[ "${#___inarr[@]}" -eq 1 && "${___inarr[0]}" == "" ]]; then    
+        ___outstr="$___sep"
+        return
+    fi
+
+    # Handle array has at least one nonempty element
+    local ___dir ___idx
+    for ___idx in "${!___inarr[@]}"; do
+        ___dir="${___inarr[$___idx]}"
+        ___dir="${___dir#"${___dir%%[![:space:]]*}"}" # trim leading and trailing whitespace
+        ___dir="${___dir%"${___dir##*[![:space:]]}"}"
+
+        if [[ "$___dir" == "" ]]; then continue; fi    # skip empty elements
+        if [[ "$___idx" -eq 0 ]]; then
+            ___outstr="$___dir"
+        else
+            ___outstr="${___outstr}${___sep}${___dir}"
+        fi
+    done
+
+}
+
+
+# clean_path {stringname} {"path""" ['sep']
+#   Sanitizes the path. Ensures that path is a valid path string.
+# Inputs:
+#   path        - Absolute or relative path
+#   sep         - Separator character with which to split/join the path. Defaults to '/'.
+# Outputs:
+#   stringname  - Name of string to store the path into.
+#
+function clean_path() {
+    local -n ___ret=$1
+    local ___path="$2"
+    local ___sep="${3:-/}"
+
+    local -a ___patharr
+    split_path ___patharr "$___path" $___sep
+    join_path ___ret ___patharr $___sep
+
+    # If path is a relative path, ensure they are in the ./* format.
+    if [[ "${___ret:0:1}" == "/" ]]; then return; fi
+    if [[ "${___ret:0:2}" == "./" ]]; then return; fi
+    if [[ "$___ret" == "." ]]; then return; fi
+    ___ret="./$___ret"
 }
 
 
@@ -691,7 +846,7 @@ function print_var() {
 
     # Print string
     if [[ "$vartype" == s ]]; then
-        printf "%s\n" "" "${wrapper}${__var}${wrapper}"
+        printf "%s\n" "${wrapper}${__var}${wrapper}"
 
     # Print array
     elif [[ "$vartype" == a || "$vartype" == A ]]; then
@@ -774,6 +929,15 @@ function str_to_arr(){
     done 3< <(printf '%s' "$__str")
     exec 3<&-
 }
+
+# ALTERNATIVE str_to_arr
+#   local sep=',' unparsed="${types}${sep}" tmp tok
+#   while [[ "$unparsed" != "" ]]; do
+#       tmp="$unparsed"; unparsed="${tmp#*"$sep"}"; tok="${tmp%"${sep}${unparsed}"}"    # split string on sep
+#       # TODO: optionally discard empty tokens, optionally trim tokens, optionally split tokens into sub-tokens
+#       __arr+=( "$tok" )
+#   done
+
 
 
 # arr_to_str {arrayname} [strname] [-e element_sep] [-p pair_sep]
