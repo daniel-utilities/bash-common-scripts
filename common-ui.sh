@@ -1,4 +1,4 @@
-#####################################################################################################
+####################################################################################################
 #
 #       BASH COMMON-UI FUNCTIONS
 #       By danielk-98, 2022
@@ -403,6 +403,94 @@ function user_selection_menu() {
 
 
 
+
+# table_print {table_name}
+function table_print() {
+    local -n __table=$1; require_table $1
+    
+    local __numrows="";     table_get_numrows  __table __numrows
+    local -a __rownames=(); table_get_rownames __table __rownames
+    local -a __rowdisplaynames=(); copy_array __rownames __rowdisplaynames
+    local __numcols="";     table_get_numcols  __table __numcols
+    local -a __colnames=(); table_get_colnames __table __colnames
+    local -a __coldisplaynames=(); copy_array __colnames __coldisplaynames
+
+    local __colsep=" | "
+    local __colsep_width="${#__colsep}"
+    local __width=0; get_term_width __width
+    local __max_col_width=20
+    local __rowname_col_width=0
+    local -a __col_widths=()
+
+    # Crop row and column names to the max size
+    local i j __val __col_width
+    for ((i = 0; i < __numrows; i++)); do
+        crop_string __rowdisplaynames[$i] "${__rownames[$i]}" "$__max_col_width"
+        __rowdisplaynames[$i]="[${__rowdisplaynames[$i]}]:"
+        # Also determine the longest rowname to set the width of the rowname column
+        if [[ "${#__rowdisplaynames[$i]}" -gt "$__rowname_col_width" ]]; then
+            __rowname_col_width="${#__rowdisplaynames[$i]}"
+        fi
+    done
+    for ((i = 0; i < __numcols; i++)); do
+        crop_string __coldisplaynames[$i] "${__colnames[$i]}" "$__max_col_width"
+        # Also determine the width of the column
+        __col_width="${#__coldisplaynames[$i]}"
+        for ((j = 0; j < __numrows; j++)); do
+            table_get __table "${__rownames[$j]}" "${__colnames[$i]}" __val
+            if [[ "${#__val}" -gt "$__col_width" ]]; then
+                __col_width="${#__val}"
+            fi
+        done
+        if [[ "$__col_width" -le "$__max_col_width" ]]; then
+            __col_widths+=("$__col_width")
+        else
+            __col_widths+=("$__max_col_width")
+        fi
+    done
+
+    # printvar __numrows
+    # printvar __numcols
+    # printvar __rowdisplaynames
+    # printvar __coldisplaynames
+    # printvar __rowname_col_width
+    # printvar __col_widths
+
+    # Display the table header
+    local __colname="" __headerline="" __whitespace="" __rowsep=""
+    get_repeated_string __whitespace " " "$__rowname_col_width"
+    printf -v __headerline "%s" "$__whitespace"
+    for ((i = 0; i < __numcols; i++)); do
+        get_center_justified_string __colname "${__coldisplaynames[$i]}" "${__col_widths[$i]}"
+        printf -v __headerline "%s%s%s" "$__headerline" "$__colsep" "$__colname"
+    done
+    crop_string __headerline "$__headerline" "$__width"
+    get_repeated_string __rowsep "-" "${#__headerline}"
+    printf "%s\n" "$__headerline"
+    printf "%s\n" "$__rowsep"
+
+    # Display the table contents
+    local __rowname="" __line="" __val=""
+    for ((i = 0; i < __numrows; i++)); do
+        __line=""
+
+        # Display the rowname first
+        get_right_justified_string __rowname "${__rowdisplaynames[$i]}" "$__rowname_col_width"
+        printf -v __line "%s" "$__rowname"
+
+        # Loop through the row's values and print them
+        for ((j = 0; j < __numcols; j++)); do
+            table_get __table "${__rownames[$i]}" "${__colnames[$j]}" __val
+            crop_string __val "$__val" "${__col_widths[$j]}"
+            get_left_justified_string __val "$__val" "${__col_widths[$j]}"
+            printf -v __line "%s%s%s" "$__line" "$__colsep" "$__val"
+        done
+
+        # Crop line to the terminal width and display it
+        crop_string __line "$__line" "$__width"
+        printf "%s\n" "$__line"
+    done
+}
 
 
 # parse_args {argspec} {outargs} {"$@"}

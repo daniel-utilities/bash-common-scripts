@@ -196,7 +196,7 @@ function find_files_matching_path() {
     done
 
     if [[ "$__errorcode" -ne 0 ]]; then
-        printf "Command '%s ' logged errors:\n" "${__cmd%%"${__cmd#*find}"}" >&2
+        printf "Command '%s' logged errors:\n" "${__cmd%%"${__cmd#*find}"}" >&2
         cat "$__errorfile" >&2
     fi
 

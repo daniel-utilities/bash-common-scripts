@@ -60,43 +60,58 @@ unset __COMMON_INSTALLER_AVAILABLE  # Set to TRUE at the end of this file.
 function find_installer_modules() {
     local -n _tab=$1
     local searchpath="$2"
+    #printf "Searchpath: '%s'\n" "$searchpath"
 
-    local -A required_keys=( [module]="" [name]="" [description]="" )
-    local -A optional_keys=( [requires]="" [longdescription]="" [platforms]="" [tags]="" [hidden]="" [command]="" )
+    # Recognized keys
+    local -A required_keys=( [module]=""
+                             [name]=""
+                             [description]="" )
+    local -A optional_keys=( [requires]=""
+                             [longdescription]=""
+                             [platforms]=""
+                             [tags]=""
+                             [hidden]=""
+                             [command]="" )
+
+    # Initialize the table
     local properties="filepath verified ${!required_keys[@]} ${!optional_keys[@]}"
-
     if ! is_table _tab; then
         table_create _tab -colnames "$properties"
     fi
 
+    # Find .sh files in the searchpath
     local file=""
-    for file in "$searchpath"/*; do
-        # Only search .sh files
-        if [[ ! -f "$file" ]]; then continue; fi
-        if [[ "$file" != *.sh ]]; then continue; fi
+    local -a files=()
+    find_files_matching_path files "$searchpath/*.sh"
+
+    # Check each .sh file for common-installer module identifiers
+    for ((i = 0; i < ${#files[@]}; i++)); do
+        file="${files[$i]}"
 
         # Must have module identifier
         if ! has_line "$file" '\[common-installer module\]' ; then continue; fi
-        printf "Found installer module: %s\n" "${required_keys[module]}"
 
-        # Scan file for the required keys; add them to the table
+        # Scan file for the required keys; skip file if it is missing any
         for key in ${!required_keys[@]}; do
             find_key_value_pair val "$file" "$key"
             required_keys["$key"]="$val"
         done
         if has_value required_keys "" ; then
-            printf "WARNING: Script identifies as an installer module but is missing required keys: $file"
+            printf "WARNING: Script identifies as an installer module but is missing some required keys: %s\n" "$file"
             continue
         fi
-        table_set_row _tab "${required_keys[module]}" required_keys
-        table_set     _tab "${required_keys[module]}" filepath "$file"
+        printf "Found installer module: %s\n" "${required_keys[module]}"
 
-        # Scan file for the optional keys; add them to the table
+        # Scan file for the optional keys
         local val=""
         for key in ${!optional_keys[@]}; do
             find_key_value_pair val "$file" "$key"
             optional_keys["$key"]="$val"
         done
+
+        # Add a new row to the table
+        table_set     _tab "${required_keys[module]}" filepath "$file"
+        table_set_row _tab "${required_keys[module]}" required_keys
         table_set_row _tab "${required_keys[module]}" optional_keys
     done
 }

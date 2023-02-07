@@ -788,6 +788,7 @@ function clean_path() {
 
     # If path is a relative path, ensure they are in the ./* format.
     if [[ "${___ret:0:1}" == "/" ]]; then return; fi
+    if [[ "${___ret:0:1}" == "~" ]]; then return; fi
     if [[ "${___ret:0:2}" == "./" ]]; then return; fi
     if [[ "$___ret" == "." ]]; then return; fi
     ___ret="./$___ret"

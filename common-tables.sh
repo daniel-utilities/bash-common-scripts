@@ -84,7 +84,7 @@ function table_get_rownames() {
 
 function table_get_numcols() {
     local -n _table=$1;    require_table $1
-    local -n _numcols=$2;  require_type_a $2
+    local -n _numcols=$2
     _numcols="${_table[__numcols]}"
 }
 
@@ -721,6 +721,7 @@ function table_remove_rows() {
         table_remove_row __table "$__remname"
     done
 }
+
 
 
 ###############################################################################
