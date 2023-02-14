@@ -64,10 +64,11 @@ function find_installer_modules() {
 
     # Recognized keys
     local -A required_keys=( [module]=""
-                             [name]=""
                              [description]="" )
     local -A optional_keys=( [requires]=""
+                             [title]=""
                              [longdescription]=""
+                             [author]=""
                              [platforms]=""
                              [tags]=""
                              [hidden]=""
@@ -133,17 +134,71 @@ function verify_installer_module() {
 
 
 
-# load_installer_module {tablevar} {module} [logfile]
+# load_installer_module {module_table} {module_name} [-args "..."] [-logfile "/path/to/logfile"]
 function load_installer_module() {
-    local -n _tab=$1
-    local module="$2"
-    local logfile="$3"
+    # Args
+    local -A _fnargs=( [args]=""
+                       [logfile]="" )
+    fast_argparse _fnargs "module_table module_name" "args logfile" "$@"
+    local -n _module_table="${_fnargs[module_table]}"
+    local _module_name="${_fnargs[module_name]}"
+    local _scriptargs="${_fnargs[args]}"
+    local _logfile="${_fnargs[logfile]}"
 
-    local script=""; table_get _tab "$module" "filepath" script
+    local _script_path=""; table_get _module_table "$_module_name" "filepath" _script_path
 
-    run_and_log "/usr/bin/env bash \"$script\" "
+    local _command="printf 'Loading module [%s]. Logfile: \"%s\"\n\n' '$_module_name' '$_logfile'; /usr/bin/env bash \"$_script_path\" $_scriptargs"
+    
+    run_and_log "$_command" "$_logfile"
     return $?
 }
+
+
+
+# print_installer_modules
+function print_installer_modules() {
+    # Args
+    local -A _fnargs=( [width]="" )
+    fast_argparse _fnargs "modules" "width" "$@"
+
+    local -n _modules="${_fnargs[modules]}"; require_table "${_fnargs[modules]}"
+    local _width="${_fnargs[width]}"
+    if [[ "$_width" == "" ]]; then get_term_width _width; fi
+
+    # Defaults
+    local _colsep=" | "
+    local _max_col_width="40"
+    local _rowname_header=" Module: "
+    local -a _display_cols_reorder=("description"  "requires")
+    local -A _display_cols_rename=(["description"]="Description:"  ["requires"]="Requires:" )
+
+    # Only display specific columns
+    local -A _display_table
+    table_get_cols _modules _display_cols_reorder _display_table
+    table_rename_cols _display_table _display_cols_rename
+
+    # Sort modules alphabetically
+    local -a _unsorted_rownames _sorted_rownames
+    table_get_rownames _modules _unsorted_rownames
+    sort_array _unsorted_rownames _sorted_rownames
+    table_reorder_rows _display_table _sorted_rownames
+
+    # Hide modules which have hidden="true"
+    local _rowname _hidden
+    for _rowname in "${_sorted_rownames[@]}"; do
+        table_get _modules "$_rowname" "hidden" _hidden
+        if [[ "${_hidden,,}" == "true" ]]; then
+            # echo "HIDDEN: $_rowname"
+            table_remove_row _display_table "$_rowname"
+        fi
+    done
+
+    # Print the display table
+    table_print _display_table -rowname_header "$_rowname_header" -colsep "$_colsep" -max_col_width "$_max_col_width" -width "$_width" 
+
+}
+
+
 
 
 

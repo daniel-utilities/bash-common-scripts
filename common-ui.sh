@@ -46,8 +46,6 @@ unset __COMMON_UI_AVAILABLE   # Set to $TRUE at the end of this file.
 #   If "string" is longer than 'len', it is cropped to (len-length(indicator)) and the indicator text is appended to the end.
 # get_title_box {varname} {"title"} [-width numchars] [-top '-'] [-side '|'] [-corner '+']
 #   Returns a multiline block with borders on all sides and "title" center-justified within.
-# user_selection_menu {optionsarray} [-title "title"] [-subtitle "subtitle"] [-prefix "prefix"] [-prompt "prompt"]
-#   Displays a selection menu to the user and returns the user's selection.
 #
 #####################################################################################################
 #       FORMAT:
@@ -342,71 +340,29 @@ function get_title_box() {
 
 
 
-# user_selection_menu {optionsarray} [-title "title"] [-subtitle "subtitle"] [-prefix "prefix"] [-prompt "prompt"]
-#   Displays a selection menu to the user and returns the user's selection.
-# Inputs:
-#   optionsarray  - Name of array containing menu options. Indexed or associative.
-#                   Keys are menu options and values are menu descriptions.
-#   title         - Title to display at top of menu.
-#   description   - Text to display below title.
-#   prefix        - Prefix text for each line of the menu. Defaults to "  ".
-#   prompt        - Prompt text.
-# Outputs:
-#   $REPLY        - Global variable set to the index/key of the user's choice.
-#
-function user_selection_menu() {
-    # Default values
-    local -A __fnargs=([title]=""
-                       [description]="Options:"
-                       [prefix]="  "
-                       [prompt]="Enter an option: " )
-    fast_argparse __fnargs "optionsarray" "title description prefix prompt" "$@"
 
-    local -n __opts="${__fnargs[optionsarray]}"
-    local title="${__fnargs[title]}"
-    local description="${__fnargs[description]}"
-    local prefix="${__fnargs[prefix]}"
-    local prompt="${__fnargs[prompt]}"
-    local width=0; get_term_width width
-
-    # Display menu and prompt
-    printf "\n"
-    if [[ "$title" != "" ]]; then
-        local titlebox=""
-        get_title_box titlebox "$title" -width "$width" -top '#' -side '#' -corner '#'
-        printf "%s" "$titlebox"
-    fi
-    if [[ "$description" != "" ]]; then
-        wrap_string description "$description" "$width"
-        printf "%s\n" "$description"
-    fi
-#   if [[ "${title}" != "" ]]; then
-#       local divider=""
-#       printf -v divider "%${#title}s" ""
-#       printf -v divider "##%s##" "${divider// /#}"
-#       printf "%s\n" "$divider"
-#       printf "  %s\n" "$title"
-#       printf "%s\n" "$divider"
-#       printf "\n"
-#   fi
-#   if [[ "${subtitle}" != "" ]]; then
-#       printf "%s\n" "$subtitle"
-#       printf "\n"
-#   fi
-    printvar __opts -showname false -prefix "$prefix" -wrapper ""
-    printf "\n"
-    unset REPLY
-    while ! has_key __opts "$REPLY"; do
-        read -r -p "$prompt"
-    done
-}
 
 
 
 
 # table_print {table_name}
 function table_print() {
-    local -n __table=$1; require_table $1
+    local -A __fnargs=([colsep]=" | "
+                       [width]=""
+                       [max_col_width]="20"
+                       [rowname_header]="" )
+    fast_argparse __fnargs "table" "colsep width max_col_width rowname_header" "$@"
+
+    local -n __table="${__fnargs[table]}"; require_table "${__fnargs[table]}"
+
+    local __colsep="${__fnargs[colsep]}"
+    local __colsep_width="${#__colsep}"
+    local __width="${__fnargs[width]}"
+    if [[ "$__width" == "" ]]; then get_term_width __width; fi
+    local __max_col_width="${__fnargs[max_col_width]}"
+    local __rowname_col_header="${__fnargs[rowname_header]}"
+    local __rowname_col_width="${#__rowname_col_header}"
+    local -a __col_widths=()
     
     local __numrows="";     table_get_numrows  __table __numrows
     local -a __rownames=(); table_get_rownames __table __rownames
@@ -415,12 +371,6 @@ function table_print() {
     local -a __colnames=(); table_get_colnames __table __colnames
     local -a __coldisplaynames=(); copy_array __colnames __coldisplaynames
 
-    local __colsep=" | "
-    local __colsep_width="${#__colsep}"
-    local __width=0; get_term_width __width
-    local __max_col_width=20
-    local __rowname_col_width=0
-    local -a __col_widths=()
 
     # Crop row and column names to the max size
     local i j __val __col_width
@@ -457,9 +407,13 @@ function table_print() {
     # printvar __col_widths
 
     # Display the table header
-    local __colname="" __headerline="" __whitespace="" __rowsep=""
-    get_repeated_string __whitespace " " "$__rowname_col_width"
-    printf -v __headerline "%s" "$__whitespace"
+    local __colname="" __headerline="" __rowsep=""
+    if [[ "$__rowname_col_header" == "" ]]; then
+        get_repeated_string __rowname_col_header " " "$__rowname_col_width"
+    else
+        get_left_justified_string __rowname_col_header "$__rowname_col_header" "$__rowname_col_width"
+    fi
+    printf -v __headerline "%s" "$__rowname_col_header"
     for ((i = 0; i < __numcols; i++)); do
         get_center_justified_string __colname "${__coldisplaynames[$i]}" "${__col_widths[$i]}"
         printf -v __headerline "%s%s%s" "$__headerline" "$__colsep" "$__colname"

@@ -732,6 +732,39 @@ function table_remove_rows() {
 ###############################################################################
 
 
+function table_get_cols() {
+    local -n ___table=$1;     require_table $1
+    local -n ___colnames=$2
+    local -n ___newtable=$3;  table_create ___newtable
+
+
+    local ___colname
+    local -A ___col
+    for ___colname in "${___colnames[@]}"; do
+        ___col=()
+        table_get_col ___table "$___colname" ___col
+        table_set_col ___newtable "$___colname" ___col   
+    done
+}
+
+
+function table_get_rows() {
+    local -n ___table=$1;     require_table $1
+    local -n ___rownames=$2
+    local -n ___newtable=$3;  table_create ___newtable
+
+
+    local ___rowname
+    local -A ___row
+    for ___rowname in "${___rownames[@]}"; do
+        ___row=()
+        table_get_row ___table "$___rowname" ___row
+        table_set_row ___newtable "$___rowname" ___row   
+    done
+}
+
+
+
 #   neworder    - Name of an array containing a new ordering of column names.
 #                 If neworder is an indexable array, columns are placed left-to-right in the specified new ordering.
 #                 The format should be:
