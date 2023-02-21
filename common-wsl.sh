@@ -10,7 +10,7 @@
 #####################################################################################################
 #       REQUIRES COMMON-FUNCTIONS
 #
-if [[ "$__COMMON_FUNCS_AVAILABLE" != "$TRUE" ]]; then
+if [[ "$__COMMON_FUNCS_AVAILABLE__" != "$TRUE" ]]; then
     echo "ERROR: This script requires \"common-functions.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
     return 1
@@ -19,12 +19,12 @@ fi
 #####################################################################################################
 #       GLOBAL VARIABLES:
 #
-unset __COMMON_WSL_AVAILABLE  # Set to TRUE at the end of this file.
-# __WSL2                      # Set by is_wsl2
-# __WSL2_DISTRO               # Set by wsl2_get_distro_name
-# __WSL2_CMD_PATH             # Set by wsl2_get_cmd_path
-# __WSL2_POWERSHELL_PATH      # Set by wsl2_get_powershell_path
-# __WSL2_VERSION              # Set by wsl2_get_version
+unset __COMMON_WSL_AVAILABLE__  # Set to TRUE at the end of this file.
+# __WSL2__                      # Set by is_wsl2
+# __WSL2_DISTRO__               # Set by wsl2_get_distro_name
+# __WSL2_CMD_PATH__             # Set by wsl2_get_cmd_path
+# __WSL2_POWERSHELL_PATH__      # Set by wsl2_get_powershell_path
+# __WSL2_VERSION__              # Set by wsl2_get_version
 #
 #####################################################################################################
 #       FUNCTION REFERENCE:
@@ -71,15 +71,15 @@ unset __COMMON_WSL_AVAILABLE  # Set to TRUE at the end of this file.
 # Example:
 #   is_wsl2 && echo yes || echo no
 # Outputs:
-#   $__WSL2      - Numeric global var; 0 indicates this system is WSL2
+#   $__WSL2__      - Numeric global var; 0 indicates this system is WSL2
 #   $?          - Numeric exit value; 0 indicates this system is WSL2.
 #
 function is_wsl2() {
-    if [[ -z "$__WSL2" ]]; then
+    if [[ -z "$__WSL2__" ]]; then
         grep -q "WSL2" /proc/version
-        export __WSL2=$?
+        export __WSL2__=$?
     fi
-    return $__WSL2
+    return $__WSL2__
 }
 
 
@@ -97,14 +97,14 @@ function require_wsl2() {
 # wsl2_get_distro_name
 #   Determine the name of this WSL distro on the system. Each WSL installation has a unique name associated with it.
 # Outputs:
-#   $__WSL2_DISTRO - Name of WSL2 distro.
+#   $__WSL2_DISTRO__ - Name of WSL2 distro.
 #   $?            - Numeric exit value; 0 indicates success.
 #
 function wsl2_get_distro_name() {
     require_wsl2
 
-    if [[ -z "$__WSL2_DISTRO" ]]; then
-        export __WSL2_DISTRO="$(IFS='\'; x=($(wslpath -w /)); echo "${x[${#x[@]}-1]}")"
+    if [[ -z "$__WSL2_DISTRO__" ]]; then
+        export __WSL2_DISTRO__="$(IFS='\'; x=($(wslpath -w /)); echo "${x[${#x[@]}-1]}")"
     fi
 }
 
@@ -112,15 +112,15 @@ function wsl2_get_distro_name() {
 # wsl2_get_cmd_path
 #   Get the wsl-equivalent path to cmd.exe.
 # Outputs:
-#   $__WSL2_CMD_PATH - WSL path to cmd.exe
+#   $__WSL2_CMD_PATH__ - WSL path to cmd.exe
 #   $?              - Numeric exit value; 0 indicates success.
 #
 function wsl2_get_cmd_path() {
     require_wsl2
 
-    if [[ -z "$__WSL2_CMD_PATH" ]]; then
-        export __WSL2_CMD_PATH="cmd.exe"
-        [[ ! $(type -P "cmd.exe") ]] && __WSL2_CMD_PATH="$(wslpath 'C:\Windows\System32\cmd.exe')"
+    if [[ -z "$__WSL2_CMD_PATH__" ]]; then
+        export __WSL2_CMD_PATH__="cmd.exe"
+        [[ ! $(type -P "cmd.exe") ]] && __WSL2_CMD_PATH__="$(wslpath 'C:\Windows\System32\cmd.exe')"
     fi
 }
 
@@ -128,15 +128,15 @@ function wsl2_get_cmd_path() {
 # wsl2_get_powershell_path
 #   Get the wsl-equivalent path to powershell.exe.
 # Outputs:
-#   $__WSL2_POWERSHELL_PATH  - WSL path to powershell.exe
+#   $__WSL2_POWERSHELL_PATH__  - WSL path to powershell.exe
 #   $?                      - Numeric exit value; 0 indicates success.
 #
 function wsl2_get_powershell_path() {
     require_wsl2
 
-    if [[ -z "$__WSL2_POWERSHELL_PATH" ]]; then
-        export __WSL2_POWERSHELL_PATH="powershell.exe"
-        [[ ! $(type -P "$__WSL2_POWERSHELL_PATH") ]] && __WSL2_POWERSHELL_PATH="$(wslpath 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')"
+    if [[ -z "$__WSL2_POWERSHELL_PATH__" ]]; then
+        export __WSL2_POWERSHELL_PATH__="powershell.exe"
+        [[ ! $(type -P "$__WSL2_POWERSHELL_PATH__") ]] && __WSL2_POWERSHELL_PATH__="$(wslpath 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')"
     fi
 }
 
@@ -144,14 +144,14 @@ function wsl2_get_powershell_path() {
 # wsl2_get_version
 #   Get the installed version of WSL by running "wsl --version". At the moment, only works for Windows Store versions of WSL.
 # Outputs:
-#   $__WSL2_VERSION - WSL version number, or 0.0 if could not be determined.
+#   $__WSL2_VERSION__ - WSL version number, or 0.0 if could not be determined.
 #
 function wsl2_get_version() {
     require_wsl2
 
-    if [[ -z "$__WSL2_VERSION" ]]; then
-        export __WSL2_VERSION="$( cmd_exec "wsl --version" | grep "WSL version" | cut -d':' -f2  2>/dev/null || echo "0.0" )"
-        __WSL2_VERSION="$( trim "$__WSL2_VERSION" )"
+    if [[ -z "$__WSL2_VERSION__" ]]; then
+        export __WSL2_VERSION__="$( cmd_exec "wsl --version" | grep "WSL version" | cut -d':' -f2  2>/dev/null || echo "0.0" )"
+        __WSL2_VERSION__="$( trim "$__WSL2_VERSION__" )"
     fi
 }
 
@@ -160,7 +160,7 @@ function wsl2_get_version() {
 # Example: Shows an error in CMD window unless elevated=true.
 #   ps_exec "C:\\Windows\\System32\\cmd.exe" "/k net session && pause" -elevated true -hidden true
 # Inputs:
-#   $__WSL2_POWERSHELL_PATH  - WSL path to powershell.exe (or cmd /c powershell.exe)
+#   $__WSL2_POWERSHELL_PATH__  - WSL path to powershell.exe (or cmd /c powershell.exe)
 #   exepath   - Windows path (uses backslashes) to executable file
 #   args      - String containing list of arguments to pass to executable
 #   elevated  - Defaults to false. If true, EXE will be launched as Administrator.
@@ -174,7 +174,7 @@ function ps_exec() {
     local -A args=( [elevated]=false [hidden]=false )
     fast_argparse args "exepath exeargs" "elevated hidden" "$@"
 
-    wsl2_get_powershell_path  # ensures $__WSL2_POWERSHELL_PATH  is set
+    wsl2_get_powershell_path  # ensures $__WSL2_POWERSHELL_PATH__  is set
 
     local EXEARGS="${args[exeargs]}"
     local FIXEDARGS="${EXEARGS//\'/\'\'}"
@@ -182,7 +182,7 @@ function ps_exec() {
     if [[ "${args[hidden]}" == true ]];   then PARAMS="$PARAMS -WindowStyle Hidden"; fi
     if [[ "${args[elevated]}" == true ]]; then PARAMS="$PARAMS -Verb RunAs"; fi
     local CMDLET="\$PROC=Start-Process $PARAMS; \$PROC.hasExited | Out-Null; \$PROC.GetType().GetField('exitCode', 'NonPublic, Instance').GetValue(\$PROC); exit"
-    local EXITCODE=$("$__WSL2_POWERSHELL_PATH" -NoProfile -ExecutionPolicy Bypass -Command "$CMDLET" | tr -d '[:space:]')
+    local EXITCODE=$("$__WSL2_POWERSHELL_PATH__" -NoProfile -ExecutionPolicy Bypass -Command "$CMDLET" | tr -d '[:space:]')
     return $EXITCODE
 }
 
@@ -192,7 +192,7 @@ function ps_exec() {
 # Example: Shows an error in CMD window unless elevated=true.
 #   cmd_exec "ipconfig"
 # Inputs:
-#   $__WSL2_CMD_PATH    - WSL path to cmd.exe
+#   $__WSL2_CMD_PATH__    - WSL path to cmd.exe
 #   command             - CMD-executable command. Combine multiple commands in one line with '&&'.
 #   working_dir         - Windows path (uses backslashes) to execute command from.
 # Outputs:
@@ -203,11 +203,11 @@ function cmd_exec() {
     require_wsl2
     local -A args
     fast_argparse args "command" "dir" "$@"
-    wsl2_get_cmd_path  # ensures $__WSL2_CMD_PATH  is set
+    wsl2_get_cmd_path  # ensures $__WSL2_CMD_PATH__  is set
     local original_dir="$PWD"
     if [[ "${args[dir]}" != "" ]]; then cd "$(wslpath -u ${args[dir]})"; fi
 
-    "$__WSL2_CMD_PATH" /c "${args[command]}"
+    "$__WSL2_CMD_PATH__" /c "${args[command]}"
     local EXITCODE=$?
 
     cd "$original_dir"
@@ -230,4 +230,4 @@ function fix_garbled_cmd_output() {
 
 #####################################################################################################
 
-__COMMON_WSL_AVAILABLE="$TRUE"
+__COMMON_WSL_AVAILABLE__="$TRUE"

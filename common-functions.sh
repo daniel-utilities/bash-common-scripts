@@ -11,7 +11,7 @@
 #
 TRUE=0
 FALSE=1
-unset __COMMON_FUNCS_AVAILABLE  # Set to TRUE at the end of this file.
+unset __COMMON_FUNCS_AVAILABLE__  # Set to TRUE at the end of this file.
 #
 #####################################################################################################
 #       FUNCTION REFERENCE:
@@ -81,7 +81,7 @@ unset __COMMON_FUNCS_AVAILABLE  # Set to TRUE at the end of this file.
 #   Splits a string into tokens and appends each one to an array.
 # arr_to_str {arrayname} [strname] [-e element_sep] [-p pair_sep]
 #   Prints an array as a string. Prints members only, or as key/value pairs.
-# copy_array {sourcename} {destname}
+# copy_array {sourcename} {destname} [-merge]
 #   Each element of the source array is copied into the destination array.
 # sort_array {inarrname} {outarrname} [comparison]
 #   Sorts the elements of a (nonassociative) array.
@@ -824,52 +824,45 @@ function printvar() {
     print_var "$@"
 }
 function print_var() {
-    local -A _fnargs=( [showname]="true"
+    local -A fnargs_=( [showname]="true"
                        [prefix]="  "        
                        [wrapper]="\""     )
-    fast_argparse _fnargs "varname" "showname prefix wrapper" "$@"
+    fast_argparse fnargs_ "varname" "showname prefix wrapper" "$@"
 
-    local varname="${_fnargs[varname]}"
-    local -n __var=$varname
-    local vartype; get_type $varname vartype
-    if [[ "${_fnargs[showname],,}" == "true"  ]]; then
-        local showname=$TRUE
-    else
-        local showname=$FALSE
-    fi
-    local prefix="${_fnargs[prefix]}"
-    local wrapper="${_fnargs[wrapper]}"
+    local varname_="${fnargs_[varname]}"
+    local -n var_=$varname_
+    local var_type_; get_type $varname_ var_type_
 
     # Print variable name
-    if [[ $showname == $TRUE ]]; then
-        printf "%s=" "$varname"
+    if [[ "${fnargs_[showname],,}" == "true" ]]; then
+        printf "%s=" "$varname_"
     fi
 
     # Print string
-    if [[ "$vartype" == s ]]; then
-        printf "%s\n" "${wrapper}${__var}${wrapper}"
+    if [[ "$var_type_" == s ]]; then
+        printf "%s\n" "${fnargs_[wrapper]}${var_}${fnargs_[wrapper]}"
 
     # Print array
-    elif [[ "$vartype" == a || "$vartype" == A ]]; then
-        local key len maxlen=0
-        local -a keys=("${!__var[@]}") sortedkeys=()
-        if [[ "$vartype" == A ]]; then
-            sort_array keys sortedkeys
-            copy_array sortedkeys keys
+    elif [[ "$var_type_" == a || "$var_type_" == A ]]; then
+        local key_ len_ maxlen_=0
+        local -a keys_=("${!var_[@]}") sortedkeys_=()
+        if [[ "$var_type_" == A ]]; then
+            sort_array keys_ sortedkeys_
+            copy_array sortedkeys_ keys_
         fi
 
-        for key in "${keys[@]}"; do       # get length of longest string (+2)
-            ((len="${#key}"+2))
-            if [[ $len -gt $maxlen ]]; then maxlen=$len; fi
+        for key_ in "${keys_[@]}"; do       # get length of longest string (+2)
+            ((len_="${#key_}"+2))
+            if [[ $len_ -gt $maxlen_ ]]; then maxlen_=$len_; fi
         done
 
-        if [[ $showname == $TRUE ]]; then
+        if [[ "${fnargs_[showname],,}" == "true" ]]; then
             printf "\n"
         fi
 
         
-        for key in "${keys[@]}"; do
-            printf "%s%${maxlen}s: %s\n" "$prefix" "[$key]" "${wrapper}${__var[$key]}${wrapper}"
+        for key_ in "${keys_[@]}"; do
+            printf "%s%${maxlen_}s: %s\n" "${fnargs_[prefix]}" "[$key_]" "${fnargs_[wrapper]}${var_[$key_]}${fnargs_[wrapper]}"
         done
     fi
 
@@ -983,39 +976,43 @@ function arr_to_str() {
 }
 
 
-# copy_array {sourcename} {destname}
+# copy_array {sourcename} {destname} [-merge]
 #   Each element of the source array is copied into the destination array.
 #   If copying from associative array (A) to nonassociative array (a),
 #     an element will only be copied if the key is a valid index (positive integer).
 # Inputs:
 #   sourcename   - Name of source array. CANNOT be named: ___in
+#   -merge       - If specified, destination array is not cleared before the copy.
 # Outputs:
 #   destname     - Name of output array. CANNOT be named: ___out
 # 
 function copy_array() {
     if [[ "$1" == "" ]]; then return_error "No array variable specified in position 1."
     else                      local -n ___in=$1
-                              local intype; get_type ___in intype
-                              [[ "$intype" == s ]] && return_error "$1 is not an array";
+                              local ___intype; get_type ___in ___intype
+                              [[ "$___intype" == s ]] && return_error "$1 is not an array";
     fi
     if [[ "$2" == "" ]]; then return_error "No array variable specified in position 2."
     else                      local -n ___out=$2
-                              local outtype; get_type ___out outtype
-                              [[ "$outtype" == s ]] && return_error "$2 is not an array";
+                              local ___outtype; get_type ___out ___outtype
+                              [[ "$___outtype" == s ]] && return_error "$2 is not an array";
     fi
-    ___out=() # clear destination
+    if [[ "$3" != "-merge" ]]; then
+        ___out=()   #   clear destination
+    fi
 
     # copy contents
-    local key val
-    for key in "${!___in[@]}"; do
-        val="${___in[$key]}"
+    local ___key ___val
+    for ___key in "${!___in[@]}"; do
+        ___val="${___in[$___key]}"
 
-        if [[ "$outtype" == a ]]; then
-            is_integer_ge_0 "$key" && ___out["$key"]="$val"
+        if [[ "$___outtype" == a ]]; then
+            is_integer_ge_0 "$___key" && ___out["$___key"]="$___val"
         else
-            ___out["$key"]="$val"
+            ___out["$___key"]="$___val"
         fi
     done
+    return 0
 }
 
 
@@ -1528,4 +1525,4 @@ function set_intersection() {
 
 #####################################################################################################
 
-__COMMON_FUNCS_AVAILABLE="$TRUE"
+__COMMON_FUNCS_AVAILABLE__="$TRUE"

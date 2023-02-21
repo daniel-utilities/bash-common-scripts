@@ -10,7 +10,7 @@
 #####################################################################################################
 #       REQUIRES COMMON-FUNCTIONS
 #
-if [[ "$__COMMON_FUNCS_AVAILABLE" != "$TRUE" ]]; then
+if [[ "$__COMMON_FUNCS_AVAILABLE__" != "$TRUE" ]]; then
     echo "ERROR: This script requires \"common-functions.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
     return 1
@@ -19,7 +19,9 @@ fi
 #####################################################################################################
 #       GLOBAL VARIABLES:
 #
-unset __COMMON_IO_AVAILABLE  # Set to TRUE at the end of this file.
+unset __COMMON_IO_AVAILABLE__   # Set to TRUE at the end of this file.
+# __EXIT_TRAPS__                # Array containing a stack of commands to run on script exit. Set by push_exit_trap.
+# __EXIT_CODE__                 # Contains the exit code after a call to 'exit', if push_exit_trap was used.
 #
 #####################################################################################################
 #       FUNCTION REFERENCE:
@@ -28,8 +30,14 @@ unset __COMMON_IO_AVAILABLE  # Set to TRUE at the end of this file.
 #   Checks if system has been initialized with systemd.
 # require_systemd
 #   Returns from the calling function with an error message if systemd is not available.
-# run_and_log {commmand} [logfile]
+# run_and_log {commmand} [-logfile "path/to/logfile"] [-append true|false] [-set "abefhkmnptuvxBCHP] [-o option-name]"]
 #   Run a shell command in the current environment and log the output to a file.
+# push_exit_trap {"command"} ["exit message"]
+#   Registers a command to run on script exit (EXIT or SIGINT).
+# pop_exit_trap
+#   Runs the last command added to the exit traps array and removes it from the stack.
+# pop_all_exit_traps
+#   Runs all commands in the exit traps array in LIFO order and clears the stack.
 # find_files_matching_path {arrayname} {"path"} [-type "b,c,d,p,f,l" ] [-su false|true|auto] [-ret_searchpath varname] [-ret_searchdepth varname]
 #   Returns an array of files matching the "path" string, which may have one or more wildcards (*).
 # single_copy {"source"} {"destination"} [-mkdir true|false] [-overwrite true|false] [-preserve false|true] [-chmod "..."] [-chown "..."] [-su false|true|auto]
@@ -38,7 +46,7 @@ unset __COMMON_IO_AVAILABLE  # Set to TRUE at the end of this file.
 #  Copies files from multiple sources to multiple destinations, resolving wildcards (*) in the source paths.
 # extract {SOURCE} {DESTINATION}
 #   Extracts an archive file to a destination directory. Supports tar, gz, bz2, xz, zip.
-# git_latest {URL} {BRANCH}
+# git_latest {"url"} {"branch"}
 #   Clones or pulls a git repository in the current directory (with recursive submodules).
 # has_line {"file"} {"regexp"} [varname]
 #  Searches a file for a line which matches the regular expression.
@@ -104,31 +112,105 @@ function require_systemd() {
 }
 
 
-# run_and_log {commmand} [logfile]
+# run_and_log {commmand} [-logfile "path/to/logfile"] [-append true|false] [-set "abefhkmnptuvxBCHP] [-o option-name]"]
 #   Run a shell command in the current environment and log the output to a file.
 # Inputs:
 #   command     - Command to run. Runs in the current environment.
-#   logfile     - Appends output to this file.
+#   logfile     - Writes output to this file.
+#   append      - If true (default), appends output to this file instead of overwriting it
+#   set         - Applies these shell options before running the command, and restores the originals after.
 # Outputs:
 #   logfile     - File is created if it does not exist, and text is appended to the end.
 #   $?          - Numeric exit value of the command.
 #
 function run_and_log() {
-    local command="$1"
-    local logfile="$2"
-    local errorcode=0
+    local -A _fnargs=( ["append"]="true" ["set"]="$-"  )
+    fast_argparse _fnargs "command" "logfile append set" "$@"
+    if [[ "${_fnargs[append]}" == "true" ]]; then   local append_flag="-a"
+    else                                            local append_flag="";       fi
+    local _exitcode=0
 
-    if [[ "$logfile" == "" ]]; then 
-        eval "$command ; errorcode=\$?"
+    push_exit_trap "set -$-"
+    if [[ "${_fnargs[logfile]}" == "" ]]; then 
+        [[ "${_fnargs[set]}" != "" ]] && set -${_fnargs[set]}
+        eval "${_fnargs[command]} ; _exitcode=\$?"
     else
-        eval "$command ; errorcode=\$?" > >(tee -a -- "$logfile") 2>&1
+        [[ "${_fnargs[set]}" != "" ]] && set -${_fnargs[set]}
+        eval "${_fnargs[command]} ; _exitcode=\$?" > >(tee $append_flag -- "${_fnargs[logfile]}") 2>&1
+    fi
+    pop_exit_trap
+
+    if [[ $? -ne 0 ]]; then # Return exit code of 'eval'
+        return $?
+    else                    # Return exit code of the command
+        return $_exitcode
+    fi
+}
+
+
+# push_exit_trap {"command"} ["exit message"]
+#   Registers a command to run on script exit (EXIT or SIGINT).
+# Inputs:
+#   command     - Command to run on script exit. Commands will execute in LIFO order.
+#   message     - Message to print on script exit. Only applies if no message has been set yet.
+# Outputs:
+#   __EXIT_TRAPS__  - Global variable (array) containing the stack of commands.
+#   
+function push_exit_trap() {
+    local command="$1"
+    local message="$2"
+
+    # Init __EXIT_TRAPS__ if necessary
+    if [[ ! -v __EXIT_TRAPS__ ]]; then
+        declare -ag __EXIT_TRAPS__=()
+        if [[ "$message" == "" ]]; then
+            trap "declare -g __EXIT_CODE__=\$? ; pop_all_exit_traps" EXIT
+        else
+            trap "declare -g __EXIT_CODE__=\$? ; printf '\n%s\n' '$message' ; pop_all_exit_traps" EXIT
+        fi
+        trap "exit 2" SIGINT
     fi
 
-    if [[ $? -eq 0 ]]; then # Error code of the command
-        return $errorcode
-    else                    # Error code of "eval"
-        return $?
+    __EXIT_TRAPS__+=( "$command" )   # Top of stack is last item in array
+}
+
+
+# pop_exit_trap
+#   Runs the last command added to the exit traps array and removes it from the stack.
+# Outputs:
+#   $?          - Numeric exit value of the command.
+#   
+function pop_exit_trap() {
+    if [[ ! -v __EXIT_TRAPS__ ]]; then return 0; fi
+
+    local indices=("${!__EXIT_TRAPS__[@]}");
+    local top_idx="${indices[@]: -1}"     # Top of stack is last item in array
+    local command="${__EXIT_TRAPS__[$top_idx]}"
+    local exitcode=0
+
+    # Run the command
+    if [[ "$command" != "" ]]; then
+        eval "$command ; exitcode=$?"
     fi
+
+    unset "__EXIT_TRAPS__[$top_idx]"    # Remove command from top of stack
+    return $exitcode
+}
+
+
+# pop_all_exit_traps
+#   Runs all commands in the exit traps array in LIFO order and clears the stack.
+# Outputs:
+#   $?          - Returns the last nonzero exit value of the commands, or 0 if all ran successfully.
+#   
+function pop_all_exit_traps() {
+    if [[ ! -v __EXIT_TRAPS__ ]]; then return 0; fi
+
+    local exitcode=0
+    while [[ "${#__EXIT_TRAPS__[@]}" -gt 0 ]]; do
+        pop_exit_trap || exitcode=$?
+    done
+    return $exitcode
 }
 
 
@@ -460,7 +542,7 @@ function multi_copy() {
 
     # Create destination directories, copy files, and apply attributes as specified
     for idx in "${!srcfiles[@]}"; do
-        singlecopy "${srcfiles[$idx]}" "${dstfiles[$idx]}" \
+        single_copy "${srcfiles[$idx]}" "${dstfiles[$idx]}" \
             -mkdir "${_fnargs[mkdir]}"  \
             -overwrite "${_fnargs[overwrite]}"  \
             -preserve "${_fnargs[preserve]}"  \
@@ -540,31 +622,30 @@ function extract() {
 }
 
 
-# git_latest {URL} {BRANCH}
+# git_latest {"url"} {"branch"}
 #   Clones or pulls a git repository in the current directory (with recursive submodules).
 #   If repo already exists, resets local changes and pulls the latest version.
 # Inputs:
-#   URL         - URL to Git repository
-#   BRANCH      - Branch to clone/pull
+#   url         - URL to Git repository
+#   branch      - Branch to clone/pull
 #
 function git_latest()
 {
-    local URL="$1"
-    local BRANCH="$2"
+    local url="$1"
+    local branch="$2"
     
-    local EXT="${URL##*.}"
-    local DIR="$(basename "$URL" .$EXT)"
-    local DIR_OG="$PWD"
+    local repo_name; get_basename repo_name "$url"
+    local repo_name="${repo_name%.*}"
 
-    if [[ -d "$DIR" ]]; then
-        cd "$DIR"
+    if [[ -d "./$repo_name" ]]; then
+        cd "$repo_name"
         git fetch --all
-        git reset --hard origin/$BRANCH
+        git reset --hard origin/$branch
         git pull
         git submodule update --init --recursive
-        cd "$DIR_OG"
+        cd "$wd"
     else
-        git clone --single-branch "$BRANCH" --recurse-submodules "$URL"
+        git clone --branch "$branch" --recurse-submodules "$url"
     fi
 }
 
@@ -904,4 +985,4 @@ function sysv_config_user_service() {
 
 #####################################################################################################
 
-__COMMON_IO_AVAILABLE="$TRUE"
+__COMMON_IO_AVAILABLE__="$TRUE"

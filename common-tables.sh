@@ -10,7 +10,7 @@
 #####################################################################################################
 #       REQUIRES COMMON-FUNCTIONS
 #
-if [[ "$__COMMON_FUNCS_AVAILABLE" != "$TRUE" ]]; then
+if [[ "$__COMMON_FUNCS_AVAILABLE__" != "$TRUE" ]]; then
     echo "ERROR: This script requires \"common-functions.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
     return 1
@@ -19,7 +19,7 @@ fi
 #####################################################################################################
 #       GLOBAL VARIABLES:
 #
-unset __COMMON_TABLES_AVAILABLE  # Set to TRUE at the end of this file.
+unset __COMMON_TABLES_AVAILABLE__  # Set to TRUE at the end of this file.
 #
 #####################################################################################################
 #       FUNCTION REFERENCE:
@@ -870,4 +870,4 @@ function table_reorder_rows() {
 
 #####################################################################################################
 
-__COMMON_TABLES_AVAILABLE="$TRUE"
+__COMMON_TABLES_AVAILABLE__="$TRUE"

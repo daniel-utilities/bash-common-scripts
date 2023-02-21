@@ -5,23 +5,29 @@
 #
 #       git clone https://github.com/daniel-utilities/bash-common-scripts.git
 #       source ./bash-common-scripts/common-functions.sh
+#       source ./bash-common-scripts/common-tables.sh
 #       source ./bash-common-scripts/common-ui.sh
 #
 #####################################################################################################
-#       REQUIRES COMMON-FUNCTIONS
+#       REQUIRES COMMON-FUNCTIONS, COMMON-TABLES
 #
-if [[ "$__COMMON_FUNCS_AVAILABLE" != "$TRUE" ]]; then
+if [[ "$__COMMON_FUNCS_AVAILABLE__" != "$TRUE" ]]; then
     echo "ERROR: This script requires \"common-functions.sh\" to be sourced in the current environment."
     echo "Please run \"source path/to/common-functions.sh\" before sourcing this script."
+    return 1
+fi
+if [[ "$__COMMON_TABLES_AVAILABLE__" != "$TRUE" ]]; then
+    echo "ERROR: This script requires \"common-tables.sh\" to be sourced in the current environment."
+    echo "Please run \"source path/to/common-tables.sh\" before sourcing this script."
     return 1
 fi
 #
 #####################################################################################################
 #       GLOBAL VARIABLES:
 #
-unset __COMMON_UI_AVAILABLE   # Set to $TRUE at the end of this file.
+unset __COMMON_UI_AVAILABLE__   # Set to $TRUE at the end of this file.
 # REPLY                       # Set by any function which reads user input.
-# __AUTOCONFIRM               # If == $TRUE, skips confirmation prompts (returns 0 automatically)
+# __AUTOCONFIRM__                 # If $__AUTOCONFIRM__ == $TRUE, skips confirmation prompts (returns 0 automatically)
 #
 #####################################################################################################
 #       FUNCTION REFERENCE:
@@ -78,13 +84,13 @@ unset __COMMON_UI_AVAILABLE   # Set to $TRUE at the end of this file.
 # Inputs:
 #   prompt          - Optional prompt text.
 #   &0 (stdin)      - Reads user input from stdin
-#   $__AUTOCONFIRM   - If $__AUTOCONFIRM == $TRUE, will immediately return 0 without prompt.
+#   $__AUTOCONFIRM__   - If $__AUTOCONFIRM__ == $TRUE, will immediately return 0 without prompt.
 # Outputs:
 #   &1 (stdout)     - Writes prompt to stdout
 #   $REPLY          - Global variable is set automatically. Contains user input.
 #
 function pause() {
-    if [[ "$__AUTOCONFIRM" == $TRUE ]]; then return 0; fi
+    if [[ "$__AUTOCONFIRM__" == $TRUE ]]; then return 0; fi
     if [[ "$1" == "" ]]; then local prompt="Press ENTER to continue... "
     else                      local prompt="$1 "
     fi
@@ -99,14 +105,14 @@ function pause() {
 # Inputs:
 #   prompt          - Optional prompt text. Defaults to "Continue?"
 #   &0 (stdin)      - Reads user input from stdin
-#   $__AUTOCONFIRM   - If $__AUTOCONFIRM == $TRUE, will immediately return 0 without prompt.
+#   $__AUTOCONFIRM__   - If $__AUTOCONFIRM__ == $TRUE, will immediately return 0 without prompt.
 # Outputs:
 #   &1 (stdout)     - Writes prompt to stdout
 #   $?              - Numeric exit value; Returns 0 (success) if user has provided confirmation, 1 if not.
 #   $REPLY          - Global variable is set automatically. Contains user input.
 #
 function confirmation_prompt() {
-    if [[ "$__AUTOCONFIRM" == $TRUE ]]; then return 0; fi
+    if [[ "$__AUTOCONFIRM__" == $TRUE ]]; then return 0; fi
     if [[ "$1" == "" ]]; then local prompt="Continue? [Y/N]: "
     else                      local prompt="$1 [Y/N]: "
     fi
@@ -121,7 +127,7 @@ function confirmation_prompt() {
 # Inputs:
 #   prompt          - Optional prompt text. Defaults to "Continue?"
 #   &0 (stdin)      - Reads user input from stdin
-#   $__AUTOCONFIRM   - If $__AUTOCONFIRM == $TRUE, will immediately return 0 without prompt.
+#   $__AUTOCONFIRM__   - If $__AUTOCONFIRM__ == $TRUE, will immediately return 0 without prompt.
 # Outputs:
 #   &1 (stdout)     - Writes prompt to stdout
 #   $?              - Numeric exit value; Returns 0 (success) if user has provided confirmation, 1 if not.
@@ -338,15 +344,8 @@ function get_title_box() {
 #   of the format '__NAME' may cause errors.
 ###############################################################################
 
-
-
-
-
-
-
-
-# table_print {table_name}
-function table_print() {
+# print_table {table_name}
+function print_table() {
     local -A __fnargs=([colsep]=" | "
                        [width]=""
                        [max_col_width]="20"
@@ -695,4 +694,4 @@ function table_print() {
 
 #####################################################################################################
 
-__COMMON_UI_AVAILABLE="$TRUE"
+__COMMON_UI_AVAILABLE__="$TRUE"
