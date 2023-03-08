@@ -100,6 +100,7 @@ declare -a __LOADER_REQUIRED_PROPS__=(
 declare -a __LOADER_OPTIONAL_PROPS__=(
     "CUSTOM_MENU_COMMANDS"
     "CUSTOM_ARGS"
+    "CUSTOM_ARGS_HELP_TEXT"
 )
 declare    __MODULE_HEADER_STRING__='\[common-installer module\]'
 declare -a __MODULE_REQUIRED_PROPS__=(
