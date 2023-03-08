@@ -67,15 +67,27 @@ declare    __COMMON_TEMPLATE_VERSION__="1.0"
 declare -A __DEFAULT_ARGS__=(
     ["install"]=""
     ["force"]="false"
-    ["logfile"]=""
     ["allowroot"]="false"
+    ["logfile"]="./${__LOADER_BASE_NAME__:-common-installer}.log"
 )
-declare -A __DEFAULT_ARGS_HELP_TEXT__=(
-    ["install"]="[--install \"module list\"]    Space-separated list of module names. Installs these modules (and their dependencies) in unattended mode, skipping all user input prompts. Skips modules which are already installed."
-    ["force"]="[--force true|false]    If true, modules will be reinstalled even if they are already installed."
-    ["logfile"]="[--logfile \"path/to/file.log\"]"
-    ["allowroot"]="[--allowroot true|false]    If true, the installer may be run with sudo."
-)
+declare    __DEFAULT_ARGS_HELP_TEXT__=\
+"--help                    Shows this help text.
+--install \"module list\"   Space-separated list of module names to install.
+                            Installs these modules (and their dependencies) in
+                            unattended mode, suppressing all user input prompts.
+                            By default, the loader skips modules which are
+                            already installed (unless using --force true)
+                            If left blank, displays the interactive menu.
+                            Default: \"${__DEFAULT_ARGS__[install]}\"
+--force false|true        Forces modules to install even if they are already installed.
+                            Default: \"${__DEFAULT_ARGS__[force]}\"
+--allowroot false|true    Allows the installer to run with superuser privilege.
+                            If false, the installer will refuse to run with
+                            superuser privilege. Modules which use 'sudo' will ask
+                            for a sudo password if needed.
+                            Default: \"${__DEFAULT_ARGS__[allowroot]}\"
+--logfile \"/path/to/log\"  Specify a different log file. Log will be overwritten.
+                            Default: \"${__DEFAULT_ARGS__[logfile]}\""
 declare -a __LOADER_REQUIRED_PROPS__=(
     "__LOADER_TEMPLATE_VERSION__"
     "__LOADER_BASE_NAME__"
@@ -566,6 +578,19 @@ function loader_print_header() {
 
 
 
+# loader_print_help_text
+function loader_print_help_text() {
+    printf "USAGE:  %s [--opt1 \"val1\"] [--opt2 \"val2\"] ...\n\n" "${__LOADER_BASE_NAME__}.sh"
+    printf "OPTIONS:\n"
+    if [[ "$CUSTOM_ARGS_HELP_TEXT" == "" ]]; then
+        printf "%s\n\n" "$__DEFAULT_ARGS_HELP_TEXT__"
+    else
+        printf "%s\n\n" "$CUSTOM_ARGS_HELP_TEXT"
+    fi
+}
+
+
+
 # loader_get_module_definition_from_name {module_table} {"module_name"}
 function loader_get_module_definition_from_name() {
     local -n __module_table=$1
@@ -743,6 +768,13 @@ function loader_start() {
         return_error "Invalid value of __LOADER_BASE_NAME__: \"$__LOADER_BASE_NAME__\""
     fi
 
+    # Display help text
+    local maybehelp="$1"; trim maybehelp
+    if [[ "${maybehelp,,}" == "--help" ]]; then
+        loader_print_help_text
+        exit
+    fi
+
 
     #######################################################
     ##  SET GLOBAL VARIABLES
@@ -769,6 +801,8 @@ function loader_start() {
     # Set __ALLOW_ROOT__
     if [[ "${__ARGS__[allowroot],,}" == "true" ]]; then
                                                     declare -g __ALLOW_ROOT__="$TRUE"
+                                                    echo "Requesting elevation..."
+                                                    sudo echo "...granted."
     else                                            declare -g __ALLOW_ROOT__="$FALSE"
                                                     require_non_root
     fi
