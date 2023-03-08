@@ -325,7 +325,7 @@ function single_copy() {
     local dstfile="${_fnargs[dst]}"
     [[ "${_fnargs[mkdir],,}" == "true" ]]     && local mkdir_args="-p -v" || local mkdir_args="-v"
     [[ "${_fnargs[overwrite],,}" == "true" ]] && local cp_args="-v -f"    || local cp_args="-v -n"
-    [[ "${_fnargs[preserve],,}" == "true" ]]  && cp_args="$cp_args --preserve=all"
+    [[ "${_fnargs[preserve],,}" == "true" ]]  && cp_args="$cp_args --preserve=all" || cp_args="$cp_args"
     [[ "${_fnargs[chmod]}" != "" ]]           && local chmod_args="-f -c --preserve-root ${_fnargs[chmod]}" || local chmod_args=""
     [[ "${_fnargs[chown]}" != "" ]]           && local chown_args="-f -c --preserve-root ${_fnargs[chown]}" || local chown_args=""
     [[ "${_fnargs[su],,}" == "true" ]]        && local cmd_prefix="sudo"  || local cmd_prefix=""
@@ -386,13 +386,14 @@ function single_copy() {
         get_dirname dst_dir "$dstfile"
     fi
 
-    (   
-        set -e
-        if [[ "${_fnargs[su],,}" == "auto" ]]; then exec 2>/dev/null; fi
+    local __cmdoutput __errorcode=0
+    __cmdoutput="$(   
+        set +e +o pipefail; trap - EXIT ERR # Disable any preexisting failure modes or traps
+        exec 2>&1
 
         # mkdir
         if [[ ! -d "$dst_dir" ]]; then
-            $cmd_prefix mkdir $mkdir_args -- "$dst_dir"
+            $cmd_prefix mkdir $mkdir_args -- "$dst_dir" || exit $?
         fi
 
         # copy
@@ -407,14 +408,14 @@ function single_copy() {
         else
             local cp_dst="$dstfile"
         fi
-        $cmd_prefix cp $cp_args -- "$cp_src" "$cp_dst"
+        $cmd_prefix cp $cp_args -- "$cp_src" "$cp_dst" || exit $?
 
         # chmod
         if [[ "$chmod_args" != "" ]]; then
             if [[ $dst_is_dir == $TRUE ]]; then
                 chmod_args="-R $chmod_args"
             fi
-            $cmd_prefix chmod $chmod_args -- "$dstfile"
+            $cmd_prefix chmod $chmod_args -- "$dstfile" || exit $?
         fi
 
         # chown
@@ -422,7 +423,7 @@ function single_copy() {
             if [[ $dst_is_dir == $TRUE ]]; then
                 chown_args="-R $chown_args"
             fi
-            $cmd_prefix chown $chown_args -- "$dstfile"
+            $cmd_prefix chown $chown_args -- "$dstfile" || exit $?
         fi
 
         # printvar mkdir_args
@@ -432,25 +433,24 @@ function single_copy() {
         # printvar chmod_args
         # printvar chown_args
         exit 0
-    )
-    local errorcode=$?
+    )" || __errorcode=$?
 
-    if [[ $errorcode -ne 0 && "${_fnargs[su]}" == "auto" ]]; then   # If errors occurred and su == auto, rerun with -su true
+    if [[ $__errorcode -eq 0 ]]; then
+        printf "%s\n" "$__cmdoutput"
+    elif [[ "${_fnargs[su]}" != "auto" ]]; then # errors occurred, su != auto
+        printf "%s\n" "$__cmdoutput" >&2
+    else  # If errors occurred and su == auto, rerun with -su true
         single_copy "${_fnargs[src]}" "${_fnargs[dst]}" \
             -mkdir "${_fnargs[mkdir]}"  \
             -overwrite "${_fnargs[overwrite]}"  \
             -preserve "${_fnargs[preserve]}"  \
             -chmod "${_fnargs[chmod]}"  \
             -chown "${_fnargs[chown]}"  \
-            -su "true"
-        errorcode=$?
+            -su "true"  \
+          && __errorcode=$? || __errorcode=$?
     fi
 
-    if [[ $errorcode -ne 0 ]]; then
-        printf "single_copy failed with sudo." >&2
-    fi
-
-    return $errorcode
+    return $__errorcode
 }
 
 
@@ -574,50 +574,55 @@ function extract() {
     local cmd_prefix=""
     if [[ "${_fnargs[su]}" == "true" ]]; then local cmd_prefix="sudo"; fi
 
-    (
-        set -e                      # Exit subshell on error
+    local __cmdoutput __errorcode=0
+    __cmdoutput="$(   
+        set +e +o pipefail; trap - EXIT ERR # Disable any preexisting failure modes or traps
+        exec 2>&1
+
         get_realpath src "$src"     # Convert to absolute path
         local ext=""; get_fileext ext "$src"
         local name=""; get_basename name "$src" "$ext"
 
-        if [[ "${_fnargs[su]}" == "auto" ]]; then exec 2>/dev/null; fi
-
         cd "$dst_dir"
         case "${src,,}" in
             *.cbt|*.tar.bz2|*.tar.gz|*.tar.xz|*.tbz2|*.tgz|*.txz|*.tar)
-                            $cmd_prefix tar xvf "$src"      ;;
+                            $cmd_prefix tar xvf "$src"              || exit $? ;;
             *.cbz|*.epub|*.zip)
-                            $cmd_prefix unzip "$src"        ;;
+                            $cmd_prefix unzip "$src"                || exit $? ;;
             *.7z|*.apk|*.arj|*.cab|*.cb7|*.chm|*.deb|*.dmg|*.iso|*.lzh|*.msi|*.pkg|*.rpm|*.udf|*.wim|*.xar)
-                            $cmd_prefix 7z x "$src"         ;;
-            *.cbr|*.rar)    $cmd_prefix unrar x -ad "$src"  ;;
-            *.lzma)         $cmd_prefix unlzma "$src"       ;;
-            *.bz2)          $cmd_prefix bunzip2 "$src"      ;;
-            *.gz)           $cmd_prefix gunzip "$src"       ;;
-            *.z)            $cmd_prefix uncompress "$src"   ;;
-            *.xz)           $cmd_prefix unxz "$src"         ;;
-            *.exe)          $cmd_prefix cabextract "$src"   ;;
-            *.cpio)         $cmd_prefix cpio -id < "$src"   ;;
-            *.cba|*.ace)    $cmd_prefix unace x "$src"      ;;
-            *.zpaq)         $cmd_prefix zpaq x "$src"       ;;
-            *.arc)          $cmd_prefix arc e "$src"        ;;
-            *.a)            $cmd_prefix ar x "$src"         ;;
-            *.zlib)         $cmd_prefix zlib-flate -uncompress < "$src" > "$name"  ;;
+                            $cmd_prefix 7z x "$src"                 || exit $? ;;
+            *.cbr|*.rar)    $cmd_prefix unrar x -ad "$src"          || exit $? ;;
+            *.lzma)         $cmd_prefix unlzma "$src"               || exit $? ;;
+            *.bz2)          $cmd_prefix bunzip2 "$src"              || exit $? ;;
+            *.gz)           $cmd_prefix gunzip "$src"               || exit $? ;;
+            *.z)            $cmd_prefix uncompress "$src"           || exit $? ;;
+            *.xz)           $cmd_prefix unxz "$src"                 || exit $? ;;
+            *.exe)          $cmd_prefix cabextract "$src"           || exit $? ;;
+            *.cpio)         $cmd_prefix cpio -id < "$src"           || exit $? ;;
+            *.cba|*.ace)    $cmd_prefix unace x "$src"              || exit $? ;;
+            *.zpaq)         $cmd_prefix zpaq x "$src"               || exit $? ;;
+            *.arc)          $cmd_prefix arc e "$src"                || exit $? ;;
+            *.a)            $cmd_prefix ar x "$src"                 || exit $? ;;
+            *.zlib)         $cmd_prefix zlib-flate -uncompress < "$src" > "$name" || exit $? ;;
             *.cso)          local tempfile="$dst_dir/$name.iso"
-                            $cmd_prefix ciso 0 "$src" "$tempfile"
-                            $cmd_prefix extract "$tempfile"
-                            $cmd_prefix rm -f "$tempfile"   ;;
+                            $cmd_prefix ciso 0 "$src" "$tempfile"   || exit $?
+                            $cmd_prefix extract "$tempfile"         || exit $?
+                            $cmd_prefix rm -f "$tempfile"           || exit $? ;;
             *)              return_error "Cannot extract file (unrecognized file extension): $src" ;;
         esac
         exit 0
-    )
-    local errorcode=$?
+    )" || __errorcode=$?
 
-    if [[ $errorcode -ne 0 && "${_fnargs[su]}" == "auto" ]]; then   # If errors occurred and su == auto, rerun with -su true
-        extract "$src" -d "$dst_dir" -su "true"
+    if [[ $__errorcode -eq 0 ]]; then
+        printf "%s\n" "$__cmdoutput"
+    elif [[ "${_fnargs[su]}" != "auto" ]]; then # errors occurred, su != auto
+        printf "%s\n" "$__cmdoutput" >&2
+    else  # If errors occurred and su == auto, rerun with -su true
+        extract "$src" -d "$dst_dir" -su "true" \
+          && __errorcode=$? || __errorcode=$?
     fi
 
-    return $errorcode
+    return $__errorcode
 }
 
 
@@ -870,7 +875,7 @@ function sysd_config_user_service() {
     fi
 
     SERVICE_FILE="$HOME/.config/systemd/user/$SERVICE.service"
-    [[ ! -e "$SERVICE_FILE" ]] && return_error "Required file $SERVICE_FILE does not exist."
+    [[ -e "$SERVICE_FILE" ]] || return_error "Required file $SERVICE_FILE does not exist."
 
     systemctl --user $MODE $SERVICE
     systemctl --user daemon-reload

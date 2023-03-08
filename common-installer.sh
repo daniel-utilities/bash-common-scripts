@@ -635,7 +635,7 @@ function loader_get_install_order_from_string() {
                   #   set _child_priority = _parent_priority+1.
                   #   set _loop_again flag
     local _loop_again=$TRUE
-    local _parent _child _parent_priority _child_priority
+    local _parent _child _parent_priority _child_priority _child_status
     while [[ "$_loop_again" == "$TRUE" ]]; do
         _loop_again=$FALSE
 
@@ -660,9 +660,15 @@ function loader_get_install_order_from_string() {
                     return $__LOADER_ERROR_INVALID_REQUIRES__
                 fi
 
+
                 # Get _child priority (or set to 0 if not in the list yet)
                 _child_priority="${_install_priority[$_child]}"
-                if [[ "$_child_priority" == "" ]]; then _child_priority=0; fi
+                if [[ "$_child_priority" == "" ]]; then 
+                    _child_priority=0
+                    # If _child is already installed, don't add it to the list.
+                    table_get _module_table "$_child" "STATUS" _child_status
+                    if [[ "$_child_status" == "$__MODULE_STATUS_INSTALLED__" ]]; then continue; fi
+                fi
 
                 # If _child has higher priority than _parent, skip to next _child
                 if [[ "$_child_priority" -gt "$_parent_priority" ]]; then
