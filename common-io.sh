@@ -33,7 +33,7 @@ unset __COMMON_IO_AVAILABLE__   # Set to TRUE at the end of this file.
 # run_and_log {commmand} [-logfile "path/to/logfile"] [-append true|false] [-set "abefhkmnptuvxBCHP] [-o option-name]"]
 #   Run a shell command in the current environment and log the output to a file.
 # push_exit_trap {"command"} ["exit message"]
-#   Registers a command to run on script exit (EXIT or SIGINT).
+#   Registers a command to run on script exit.
 # pop_exit_trap
 #   Runs the last command added to the exit traps array and removes it from the stack.
 # pop_all_exit_traps
@@ -149,7 +149,7 @@ function run_and_log() {
 
 
 # push_exit_trap {"command"} ["exit message"]
-#   Registers a command to run on script exit (EXIT or SIGINT).
+#   Registers a command to run on script exit.
 # Inputs:
 #   command     - Command to run on script exit. Commands will execute in LIFO order.
 #   message     - Message to print on script exit. Only applies if no message has been set yet.
@@ -168,7 +168,6 @@ function push_exit_trap() {
         else
             trap "declare -g __EXIT_CODE__=\$? ; printf '\n%s\n' '$message' ; pop_all_exit_traps" EXIT
         fi
-        trap "exit 2" SIGINT
     fi
 
     __EXIT_TRAPS__+=( "$command" )   # Top of stack is last item in array
