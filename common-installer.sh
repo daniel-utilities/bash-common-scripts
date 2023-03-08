@@ -294,7 +294,7 @@ function module_install() {
     __SECTION__=$__MODULE_ERROR_STATUS__
             module_set_status
 
-    # Skip install if module is installed already and running in -install mode
+    # Skip install if module is installed already and running in --install (unattended) mode.
     __SECTION__=$__MODULE_ERROR_GENERIC__
             if [[ $__STATUS__ -eq $__MODULE_STATUS_INSTALLED__ && "$__AUTOCONFIRM__" == "$TRUE" && "$__FORCE__" == "$FALSE" ]]; then
                 printf "Skipping module [$MODULE] because it is already installed."
@@ -324,7 +324,11 @@ function module_install() {
             else
                 local prompt="Continue with installation?"
             fi
-            confirmation_prompt "$prompt" || exit $__STATUS__  # Skips this prompt if $__AUTOCONFIRM__==$TRUE
+            if [[ "$__AUTOCONFIRM__" == "$FALSE" ]]; then
+                confirmation_prompt "$prompt" || return $__STATUS__  # Skips this prompt if $__AUTOCONFIRM__==$TRUE
+            else
+                read -t 10 -p "Continuing in 10 seconds. Press ENTER to continue, or CTRL+C to exit..." || true
+            fi
 
 
     # On EXIT, run callback: on_exit
@@ -667,7 +671,7 @@ function loader_get_install_order_from_string() {
                     _child_priority=0
                     # If _child is already installed, don't add it to the list.
                     table_get _module_table "$_child" "STATUS" _child_status
-                    if [[ "$_child_status" == "$__MODULE_STATUS_INSTALLED__" ]]; then continue; fi
+                    if [[ "$_child_status" == "$__MODULE_STATUS_INSTALLED__" && "$__FORCE__" == "$FALSE" ]]; then continue; fi
                 fi
 
                 # If _child has higher priority than _parent, skip to next _child
@@ -873,16 +877,20 @@ function loader_start() {
         # Run each module sequentially
         printf "Loading the following modules:\n"
         print_var module_list -showname "false"
-        printf "\n\n"
+        printf "\n"
+        if [[ "$__AUTOCONFIRM__" == "$TRUE" ]]; then
+            read -t 10 -p "Continuing in 10 seconds. Press ENTER to continue, or CTRL+C to exit..." || true
+        fi
+        printf "\n"
         local module exitcode
         for module in "${module_list[@]}"; do
             loader_install_module module_table "$module"
             printf "\n"
-            pause "Press ENTER to continue..."   # Skipped if __AUTOCONFIRM__==TRUE
+            pause "Press ENTER to continue..."  # Skipped if $__AUTOCONFIRM__ == $TRUE
         done
 
         # Exit script (unattended mode only)
-        [[ "$__AUTOCONFIRM__" == "$TRUE" ]] && exit 0
+        if [[ "$__AUTOCONFIRM__" == "$TRUE" ]]; then exit 0; fi
     done
 }
 
