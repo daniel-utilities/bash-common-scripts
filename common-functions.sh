@@ -58,6 +58,8 @@ unset __COMMON_FUNCS_AVAILABLE__  # Set to TRUE at the end of this file.
 #   Returns TRUE ($?==0) if str is an integer >= 0
 # is_integer_gt_0 {str}
 #   Returns TRUE ($?==0) if str is an integer > 0
+# is_varname {"str"}
+#   Returns TRUE ($?==0) if str is a valid Bash variable name.
 # trim [strname]
 #   Removes leading and trailing whitespace from a string (including newlines)
 # get_basename {varname} {path} [suffix]
@@ -489,7 +491,7 @@ function is_subset(){
 # is_numeric {str}
 #   Returns TRUE ($?==0) if str is an real number
 # Inputs:
-#   val     - String value
+#   str     - String value
 # Outputs:
 #   $?      - Numeric exit code; 0 if str is a real number; 1 otherwise
 #
@@ -502,7 +504,7 @@ function is_numeric() {
 # is_integer {str}
 #   Returns TRUE ($?==0) if str is an integer
 # Inputs:
-#   val     - String value
+#   str     - String value
 # Outputs:
 #   $?      - Numeric exit code; 0 if str is an integer, 1 otherwise
 #
@@ -515,7 +517,7 @@ function is_integer() {
 # is_integer_ge_0 {str}
 #   Returns TRUE ($?==0) if str is an integer >= 0
 # Inputs:
-#   val     - String value
+#   str     - String value
 # Outputs:
 #   $?      - Numeric exit code; 0 if str is an integer >=0, 1 otherwise
 #
@@ -528,7 +530,7 @@ function is_integer_ge_0() {
 # is_integer_gt_0 {str}
 #   Returns TRUE ($?==0) if str is an integer > 0
 # Inputs:
-#   val     - String value
+#   str     - String value
 # Outputs:
 #   $?      - Numeric exit code; 0 if str is a positive integer, 1 otherwise
 #
@@ -537,6 +539,19 @@ function is_integer_gt_0() {
     [[ "$1" =~ $regex ]];
 }
 
+
+# is_varname {"str"}
+#   Returns TRUE ($?==0) if str is a valid Bash variable name.
+# Inputs:
+#   str     - String value
+# Outputs:
+#   $?      - Numeric exit code; 0 if str contains a valid variable name, 1 otherwise.
+#
+function is_varname ()
+{
+    local regex='^[_[:alpha:]][_[:alpha:][:digit:]]*$'
+    [[ "$1" =~ ${regex} ]];
+}
 
 # trim [strname]
 #   Removes leading and trailing whitespace from a string (including newlines)
