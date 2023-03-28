@@ -71,6 +71,7 @@ declare __DEFAULT_HELP_TEXT__=\
                             If left blank, displays the interactive menu.
                             Default: \"${__ARGS__[install]}\"
 --force false|true        Forces modules to reinstall even if they are already installed.
+                          Continues installation even if modules fail to install.
                             Default: \"${__ARGS__[force]}\"
 --allowroot false|true    Allows the installer to run with superuser privilege.
                             If false, the installer will refuse to run with
@@ -116,7 +117,7 @@ declare __TEMP_DIR__="${__TEMP_DIR__:-/tmp}"
 declare __LOADER_TITLE__="${LOADER_TITLE:-common-installer loader}"
 declare __LOADER_DESCRIPTION__="${LOADER_DESCRIPTION:-This loader is running in test mode.}"
 declare __MENU_PROMPT__=\
-" Commands:
+" Usage:
   Enter a module name for more information. The system will not be modified without your permission.
   Enter 'help' for a full list of commands.
   Press CTRL+C to exit the script at any time."
@@ -818,9 +819,30 @@ function loader_start() {
     ####    Add module definitions for menu commands
     local keyword
     for keyword in "${!__MENU_COMMANDS__[@]}"; do
-        local -A moduledef=( ["MODULE"]="$keyword" ["COMMAND"]="${__MENU_COMMANDS__[$keyword]}" ["HIDDEN"]="true" )
+        local -A moduledef=( ["MODULE"]="$keyword" ["COMMAND"]="${__MENU_COMMANDS__[$keyword]}" ["HIDDEN"]="true" ["STATUS"]="$__MODULE_STATUS_UNKNOWN__" )
         table_set_row module_table "$keyword" moduledef
     done
+
+    
+    ####    Add module definition for [all]
+    local requireslist module
+    local -a module_list_array=()
+    table_get_rownames module_table module_list_array
+    for module in "${module_list_array[@]}"; do
+        local param_hidden=""
+        table_get module_table "$module" "HIDDEN" param_hidden
+        if [[ "${param_hidden,,}" != "true" ]]; then    # Add all non-hidden modules to the REQUIRES list of [all]
+            requireslist="$requireslist $module"
+        fi
+    done
+    trim requireslist
+    local -A moduledef=( ["MODULE"]="all"
+                         ["TITLE"]="Installs all modules in this list"
+                         ["COMMAND"]="printf 'Completed [all].\n'; return \$__MODULE_STATUS_UNKNOWN__"
+                         ["REQUIRES"]="$requireslist"
+                         ["HIDDEN"]="false"
+                         ["STATUS"]="$__MODULE_STATUS_UNKNOWN__" )
+    table_set_row module_table "all" moduledef
 
 
     ####    Create Temp directory and register exit traps
@@ -910,17 +932,40 @@ function loader_start() {
             # Install module (or run menu command, if module is actually a menu command)
             loader_install_module module_table "$module"; status=$?
             printf "\n"
-            if [[ $status -ne $__MODULE_STATUS_INSTALLED__ ]]; then
-                printf "Module [%s] failed with exit code %s.\n\n" "$module" "$status"
+
+            # If module installed successfully, continue to the next module in the list
+            if [[ $status -eq $__MODULE_STATUS_INSTALLED__ || $status -eq $__MODULE_STATUS_UNKNOWN__ ]]; then
+                pause "Press ENTER to continue..."  # Skips this prompt if $__AUTOCONFIRM__ == $TRUE
+                printf "\n"
+                continue
+            fi
+
+            # If module failed to install, print an error message
+            if [[ $status -eq $__MODULE_STATUS_NOT_INSTALLED__ ]]; then
+                printf "ERROR: Module [%s] was not installed successfully.\n\n" "$module" 
+            else
+                printf "ERROR: Module [%s] failed with exit code: %s\n\n" "$module" "$status"
+            fi
+
+            # If module failed to install, skip the rest of the modules in the list if...
+            #   FORCE   AUTOCONF        BREAK
+            #       0           0           0
+            #       0           1           1
+            #       1           0           0
+            #       1           1           0
+            if [[ "$__FORCE__" == "$FALSE" && "$__AUTOCONFIRM__" == "$TRUE" ]]; then
+                printf "Cancelling installation because [%s] failed to install.\n" "$module"
+                printf "  Rerun script with '--force true' to change this behavior.\n\n"
                 break
             fi
-            pause "Press ENTER to continue..."  # Skips this prompt if $__AUTOCONFIRM__ == $TRUE
-            printf "\n"
-        done
+
+        done    # End of module install loop
+
 
         ####    Exit script (unattended mode only)
         if [[ "$__AUTOCONFIRM__" == "$TRUE" ]]; then exit 0; fi
-    done
+
+    done    # End of UI loop
 }
 
 
