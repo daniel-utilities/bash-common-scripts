@@ -21,6 +21,7 @@ declare -a __LOADER_SOURCES__=(
     "$__COMMON_SCRIPTS_DIR__/common-io.sh"        
     "$__COMMON_SCRIPTS_DIR__/common-tables.sh"
     "$__COMMON_SCRIPTS_DIR__/common-ui.sh"
+    "$__COMMON_SCRIPTS_DIR__/common-wsl.sh"
 )
 for __LOADER_SOURCE__ in "${__LOADER_SOURCES__[@]}"; do
     if ! source "$__LOADER_SOURCE__" ; then
